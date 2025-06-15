@@ -20,6 +20,13 @@ export interface Assistant {
   updatedAt: string;
 }
 
+export interface FileMetadata {
+  name: string;
+  type: string;
+  size: number;
+  dataUri?: string; // To store file content as a data URI
+}
+
 export interface AssistantConfig {
   id: string; // Should match Assistant's id
   assistantName: string; // Storing name here too for convenience in config forms
@@ -29,7 +36,7 @@ export interface AssistantConfig {
   systemPrompt: string;
   maxTokens: number;
   temperature: number; // 0.0 - 1.0
-  files: { name: string; type: string; size: number }[]; // Store file metadata, actual files handled separately
+  files: FileMetadata[]; // Store file metadata, actual files handled separately
   voice?: VoiceConfig;
   transcriber?: TranscriberConfig;
   // Placeholder for other tab settings

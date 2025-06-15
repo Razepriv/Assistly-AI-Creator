@@ -6,10 +6,14 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
-import { UploadCloud, FileText, X, AlertCircle, CheckCircle } from 'lucide-react';
+import { UploadCloud, FileText, X, AlertCircle } from 'lucide-react';
 import SuggestedFiles from '@/components/assistant/suggested-files';
-import type { AssistantConfig } from '@/types';
+import type { AssistantConfig, FileMetadata } from '@/types';
 import { useToast } from "@/hooks/use-toast";
+
+const MAX_FILES = 10;
+const MAX_FILE_SIZE_MB = 5;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 export default function AdvancedSettingsTab() {
   const { control, watch, setValue, formState: { errors } } = useFormContext<AssistantConfig>();
@@ -18,49 +22,83 @@ export default function AdvancedSettingsTab() {
   const files = watch('files', []);
   const temperature = watch('temperature', 0.7);
 
-  // For controlled file input
   const [fileInputKey, setFileInputKey] = useState(Date.now());
 
-
-  const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
-      const newFiles = Array.from(event.target.files).map(file => ({
-        name: file.name,
-        type: file.type,
-        size: file.size,
-      }));
-      // Check for duplicates before adding
-      const currentFileNames = files.map(f => f.name);
-      const uniqueNewFiles = newFiles.filter(nf => !currentFileNames.includes(nf.name));
-      
-      setValue('files', [...files, ...uniqueNewFiles], { shouldValidate: true });
-      
-      if (uniqueNewFiles.length < newFiles.length) {
+      const selectedFiles = Array.from(event.target.files);
+      const currentFiles = files || [];
+      let newFilesToAdd: FileMetadata[] = [];
+      let skippedFilesCount = 0;
+      let oversizedFilesCount = 0;
+      let totalFilesAfterAdd = currentFiles.length;
+
+      const fileReadPromises = selectedFiles.map(file => {
+        return new Promise<FileMetadata | null>((resolve) => {
+          if (currentFiles.some(f => f.name === file.name)) {
+            skippedFilesCount++;
+            resolve(null); // Skip duplicate
+            return;
+          }
+          if (file.size > MAX_FILE_SIZE_BYTES) {
+            oversizedFilesCount++;
+            resolve(null); // Skip oversized
+            return;
+          }
+          if (totalFilesAfterAdd >= MAX_FILES) {
+            resolve(null); // Skip if max files limit reached
+            return;
+          }
+          
+          totalFilesAfterAdd++;
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            resolve({
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              dataUri: e.target?.result as string,
+            });
+          };
+          reader.onerror = () => {
+            resolve(null); // Error reading file
+          };
+          reader.readAsDataURL(file);
+        });
+      });
+
+      const results = await Promise.all(fileReadPromises);
+      newFilesToAdd = results.filter(Boolean) as FileMetadata[];
+
+      if (newFilesToAdd.length > 0) {
+        setValue('files', [...currentFiles, ...newFilesToAdd], { shouldValidate: true, shouldDirty: true });
         toast({
-          title: "Duplicate Files Skipped",
-          description: "Some selected files were already in the list and were skipped.",
+          title: "Files Processed",
+          description: `${newFilesToAdd.length} file(s) added. ${skippedFilesCount > 0 ? `${skippedFilesCount} duplicates skipped. ` : ''}${oversizedFilesCount > 0 ? `${oversizedFilesCount} oversized files skipped. ` : ''}${totalFilesAfterAdd > MAX_FILES ? `File limit of ${MAX_FILES} reached, some files not added.` : ''} Note: Files are not yet uploaded.`,
           variant: "default"
         });
-      } else if (uniqueNewFiles.length > 0) {
+      } else if (skippedFilesCount > 0 || oversizedFilesCount > 0 || (selectedFiles.length > 0 && totalFilesAfterAdd > MAX_FILES && currentFiles.length < MAX_FILES) ) {
          toast({
-          title: "Files Added",
-          description: `${uniqueNewFiles.length} file(s) added to the list. Note: Files are not yet uploaded.`,
-          variant: "default"
+          title: "Files Skipped",
+          description: `${skippedFilesCount > 0 ? `${skippedFilesCount} duplicates skipped. ` : ''}${oversizedFilesCount > 0 ? `${oversizedFilesCount} oversized files skipped. ` : ''}${selectedFiles.length > 0 && totalFilesAfterAdd >= MAX_FILES && newFilesToAdd.length === 0 ? `File limit of ${MAX_FILES} reached.` : ''}`,
+          variant: "default" // "destructive" might be too strong if only some are skipped
         });
       }
-      // Reset file input to allow selecting the same file again after removal
-      setFileInputKey(Date.now());
+      
+      setFileInputKey(Date.now()); // Reset file input
     }
   }, [files, setValue, toast]);
 
   const removeFile = useCallback((index: number) => {
     const newFiles = [...files];
     const removedFile = newFiles.splice(index, 1);
-    setValue('files', newFiles, { shouldValidate: true });
-    toast({
-        title: "File Removed",
-        description: `"${removedFile[0].name}" removed from the list.`,
-    });
+    setValue('files', newFiles, { shouldValidate: true, shouldDirty: true });
+    if (removedFile.length > 0) {
+      toast({
+          title: "File Removed",
+          description: `"${removedFile[0].name}" removed from the list.`,
+      });
+    }
   }, [files, setValue, toast]);
 
   return (
@@ -82,7 +120,12 @@ export default function AdvancedSettingsTab() {
                 id="maxTokens"
                 type="number"
                 {...field}
-                onChange={e => field.onChange(parseInt(e.target.value, 10))}
+                value={field.value || ''} // Ensure input is controlled even if value is 0 or undefined initially
+                onChange={e => {
+                    const val = e.target.value;
+                    field.onChange(val === '' ? undefined : parseInt(val, 10));
+                }}
+                onBlur={field.onBlur}
                 className="mt-1"
               />
             )}
@@ -94,7 +137,7 @@ export default function AdvancedSettingsTab() {
         </div>
 
         <div>
-          <Label htmlFor="temperature">Temperature: {temperature.toFixed(1)}</Label>
+          <Label htmlFor="temperature">Temperature: {Number(temperature).toFixed(1)}</Label>
           <Controller
             name="temperature"
             control={control}
@@ -110,6 +153,7 @@ export default function AdvancedSettingsTab() {
               />
             )}
           />
+          {errors.temperature && <p className="text-sm text-destructive mt-1">{errors.temperature.message}</p>}
           <p className="text-sm text-muted-foreground mt-1">
             Controls randomness: Lower values make responses more deterministic (0.0 - 1.0).
           </p>
@@ -128,7 +172,7 @@ export default function AdvancedSettingsTab() {
           </label>
           <Input
             id="file-upload"
-            key={fileInputKey} // To reset the input
+            key={fileInputKey}
             type="file"
             multiple
             className="sr-only"
@@ -136,16 +180,17 @@ export default function AdvancedSettingsTab() {
             accept=".txt,.pdf,.md,.json,.csv,.html,.docx,.pptx" 
           />
           <p className="mt-2 text-xs text-muted-foreground">
-            Supported: TXT, PDF, MD, JSON, CSV, HTML, DOCX, PPTX. Max 10 files, 5MB each.
+            Supported: TXT, PDF, MD, JSON, CSV, HTML, DOCX, PPTX. Max {MAX_FILES} files, {MAX_FILE_SIZE_MB}MB each.
           </p>
+           {errors.files && <p className="text-sm text-destructive mt-1">{errors.files.message || (errors.files as any)?.root?.message}</p>}
            <p className="mt-1 text-xs text-accent flex items-center justify-center">
-            <AlertCircle size={14} className="mr-1" /> File upload functionality is for UI demonstration only.
+            <AlertCircle size={14} className="mr-1" /> File content is read for use, actual upload to a server is not implemented.
           </p>
         </div>
 
-        {files.length > 0 && (
+        {files && files.length > 0 && (
           <div className="mt-4 space-y-2">
-            <h4 className="font-medium">Added Files:</h4>
+            <h4 className="font-medium">Added Files ({files.length}/{MAX_FILES}):</h4>
             <ul className="max-h-60 overflow-y-auto rounded-md border bg-muted/30 p-2 space-y-1">
               {files.map((file, index) => (
                 <li key={index} className="flex items-center justify-between p-2 rounded bg-background shadow-sm text-sm">
@@ -170,7 +215,7 @@ export default function AdvancedSettingsTab() {
         <h3 className="text-lg font-medium text-foreground">Performance Metrics</h3>
         <div className="mt-2 p-4 border rounded-lg bg-card/50">
           <p className="text-sm text-muted-foreground">
-            Real-time Latency Display: <span className="font-semibold text-foreground">~75ms (placeholder)</span>
+            Real-time Latency Display: <span className="font-semibold text-foreground">(placeholder)</span>
           </p>
           <p className="text-xs text-muted-foreground mt-1">
             This is a placeholder for real-time performance metrics.
