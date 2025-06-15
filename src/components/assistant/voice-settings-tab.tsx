@@ -1,7 +1,7 @@
 
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useFormContext, Controller } from 'react-hook-form';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -10,9 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Volume2, Settings, SlidersHorizontal, ListFilter, Palette, Sparkles, AlertCircle } from 'lucide-react';
-import type { AssistantConfig } from '@/types';
+import { Volume2, Settings, SlidersHorizontal, ListFilter, Palette, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
+import type { AssistantConfig, VoiceConfig } from '@/types';
 import { useToast } from "@/hooks/use-toast";
+import { synthesizeSpeech, type SynthesizeSpeechInput } from '@/ai/flows/synthesize-speech-flow';
 
 // Mock data - replace with actual API calls later
 const VOICE_PROVIDERS = [{ id: 'elevenlabs', name: 'ElevenLabs' }];
@@ -37,19 +38,50 @@ const BACKGROUND_SOUNDS = [
   { id: 'custom', name: 'Custom URL' },
 ];
 
+const SAMPLE_PREVIEW_TEXT = "Hello, this is a sample of my voice. I hope you like the way I sound!";
+
 export default function VoiceSettingsTab() {
   const { control, watch, formState: { errors } } = useFormContext<AssistantConfig>();
   const { toast } = useToast();
+  const [isPreviewing, setIsPreviewing] = useState(false);
 
-  const voiceConfig = watch('voice');
+  const voiceConfig = watch('voice') as VoiceConfig; // Ensure voiceConfig is correctly typed
   const backgroundSoundType = watch('voice.backgroundSound');
 
-  const handlePreviewVoice = () => {
-    // Placeholder for actual voice preview functionality
-    toast({
-      title: "Voice Preview",
-      description: "Voice preview functionality is not yet implemented.",
-    });
+  const handlePreviewVoice = async () => {
+    if (!voiceConfig) {
+      toast({
+        title: "Configuration Error",
+        description: "Voice configuration is not available.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsPreviewing(true);
+    try {
+      const input: SynthesizeSpeechInput = {
+        textToSynthesize: SAMPLE_PREVIEW_TEXT,
+        voiceId: voiceConfig.voiceId,
+        language: voiceConfig.language,
+        speakingRate: voiceConfig.speakingRate,
+        pitch: voiceConfig.pitch,
+      };
+      const result = await synthesizeSpeech(input);
+      toast({
+        title: "Voice Preview Simulation",
+        description: result.synthesizedSpeechDescription,
+        duration: 8000, // Longer duration for reading
+      });
+    } catch (error) {
+      console.error("Error synthesizing speech:", error);
+      toast({
+        title: "Preview Error",
+        description: `Could not simulate voice preview. ${error instanceof Error ? error.message : ''}`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsPreviewing(false);
+    }
   };
 
   return (
@@ -117,7 +149,11 @@ export default function VoiceSettingsTab() {
               {errors.voice?.language && <p className="text-sm text-destructive mt-1">{errors.voice.language.message}</p>}
             </div>
           </div>
-          <Button type="button" variant="outline" onClick={handlePreviewVoice}>Preview Voice (Sample Text)</Button>
+          <Button type="button" variant="outline" onClick={handlePreviewVoice} disabled={isPreviewing}>
+            {isPreviewing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Volume2 className="mr-2 h-4 w-4" />}
+            Preview Voice (Sample Text)
+          </Button>
+           {isPreviewing && <p className="text-sm text-muted-foreground mt-2">Simulating voice preview...</p>}
         </CardContent>
       </Card>
 
@@ -279,8 +315,8 @@ export default function VoiceSettingsTab() {
         <div>
             <h4 className="font-semibold">Developer Note:</h4>
             <p className="text-sm">
-                Many advanced voice features (e.g., live preview, dynamic voice loading, custom punctuation effects, emotion/tone synthesis, real-time processing) require significant backend and API integration.
-                This UI provides the foundational controls. Actual synthesis and advanced effects are not yet implemented.
+                Many advanced voice features (e.g., live preview with actual audio, dynamic voice loading, custom punctuation effects, emotion/tone synthesis, real-time processing) require significant backend and API integration.
+                This UI provides the foundational controls. Actual synthesis and advanced effects are not yet implemented beyond simulation.
             </p>
         </div>
       </div>
