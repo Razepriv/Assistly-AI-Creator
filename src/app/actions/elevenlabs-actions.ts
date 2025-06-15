@@ -1,3 +1,4 @@
+
 'use server';
 
 import { z } from 'zod';
@@ -29,14 +30,17 @@ export async function synthesizeElevenLabsSpeech(
   });
 
   if (!validatedFields.success) {
+    console.error('ElevenLabs Action Validation Error:', validatedFields.error.flatten());
     return {
-      error: 'Invalid input: ' + validatedFields.error.flatten().fieldErrors.text?.join(', ') || validatedFields.error.flatten().fieldErrors.voiceId?.join(', '),
+      error: 'Invalid input: ' + (validatedFields.error.flatten().fieldErrors.text?.join(', ') || validatedFields.error.flatten().fieldErrors.voiceId?.join(', ') || 'Unknown validation error'),
       success: false,
     };
   }
 
   const { text, voiceId, modelId, stability, similarityBoost } = validatedFields.data;
   const apiKey = process.env.ELEVENLABS_API_KEY;
+
+  console.log('[ElevenLabs Action] Received voiceId:', voiceId);
 
   if (!apiKey) {
     console.error('ElevenLabs API key is not configured.');
@@ -66,6 +70,9 @@ export async function synthesizeElevenLabsSpeech(
       body.voice_settings.similarity_boost = similarityBoost;
     }
   }
+  
+  console.log('[ElevenLabs Action] Calling API:', elevenLabsApiUrl);
+  console.log('[ElevenLabs Action] Request body:', JSON.stringify(body));
 
   try {
     const response = await fetch(elevenLabsApiUrl, {
@@ -75,17 +82,34 @@ export async function synthesizeElevenLabsSpeech(
     });
 
     if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({ detail: { message: 'Unknown error from ElevenLabs API' } }));
-      console.error('ElevenLabs API Error:', response.status, errorBody);
-      return { error: `ElevenLabs API Error: ${response.status} - ${errorBody.detail?.message || JSON.stringify(errorBody)}`, success: false };
+      let errorResponseText = await response.text(); // Read as text first for logging
+      console.error('[ElevenLabs Action] API Error Status:', response.status);
+      console.error('[ElevenLabs Action] API Error Response Text:', errorResponseText);
+      
+      let errorDetailMessage = 'Unknown error from ElevenLabs API';
+      try {
+        const errorBodyJson = JSON.parse(errorResponseText);
+        if (errorBodyJson.detail && typeof errorBodyJson.detail.message === 'string') {
+            errorDetailMessage = errorBodyJson.detail.message;
+        } else if (errorBodyJson.detail && typeof errorBodyJson.detail === 'string') {
+            errorDetailMessage = errorBodyJson.detail;
+        } else {
+            errorDetailMessage = JSON.stringify(errorBodyJson);
+        }
+      } catch (e) {
+        // If parsing JSON fails, use the raw text (or a part of it)
+        errorDetailMessage = errorResponseText.substring(0, 500); // Limit length
+      }
+      
+      return { error: `ElevenLabs API Error: ${response.status} - ${errorDetailMessage}`, success: false };
     }
 
     const audioBuffer = await response.arrayBuffer();
     const audioBase64 = Buffer.from(audioBuffer).toString('base64');
-
+    console.log('[ElevenLabs Action] Speech synthesis successful.');
     return { audioBase64: audioBase64, success: true };
   } catch (error) {
-    console.error('Failed to synthesize speech with ElevenLabs:', error);
+    console.error('[ElevenLabs Action] Failed to synthesize speech:', error);
     return { error: 'Failed to connect to ElevenLabs API. ' + (error instanceof Error ? error.message : String(error)), success: false };
   }
 }

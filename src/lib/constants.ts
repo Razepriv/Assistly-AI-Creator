@@ -10,7 +10,7 @@ export const OPENAI_MODELS = [
 
 export const DEFAULT_VOICE_CONFIG: VoiceConfig = {
   provider: 'elevenlabs',
-  voiceId: 'bella', 
+  voiceId: '21m00Tcm4TlvDq8ikWAM', // Changed from 'bella' to Rachel's ID
   language: 'en-US',
   backgroundSound: 'default',
   backgroundSoundUrl: '',
@@ -104,7 +104,7 @@ export const INITIAL_ASSISTANT_CONFIGS: Record<string, AssistantConfig> = {
     systemPromptEnforcement: { enabled: false },
     voice: {
       ...DEFAULT_VOICE_CONFIG,
-      voiceId: 'adam', 
+      voiceId: '2EiwWnXFnvU5JabPnv8n', // Clyde's ID
       emotion: 'friendly',
       tone: 'professional',
     },
@@ -126,7 +126,7 @@ export const INITIAL_ASSISTANT_CONFIGS: Record<string, AssistantConfig> = {
     systemPromptEnforcement: { enabled: false },
     voice: {
       ...DEFAULT_VOICE_CONFIG,
-      voiceId: 'rachel',
+      voiceId: '21m00Tcm4TlvDq8ikWAM', // Rachel's ID (already default)
       speakingRate: 1.1, 
       pitch: 1.05, 
       emotion: 'excited',
