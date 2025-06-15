@@ -6,20 +6,83 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ModelConfigTab from './model-config-tab';
 import AdvancedSettingsTab from './advanced-settings-tab';
 import VoiceSettingsTab from './voice-settings-tab';
+import TranscriberSettingsTab from './transcriber-settings-tab'; // Import new tab
 import { useForm, FormProvider } from 'react-hook-form';
 import type { AssistantConfig } from '@/types';
 import { useConfigStore } from '@/store/config-store';
 import { useAssistantStore } from '@/store/assistant-store';
 import { Button } from '@/components/ui/button';
-import { Save, Settings2, SlidersHorizontal, Puzzle, BarChart2, Info, Mic2 } from 'lucide-react';
+import { Save, Settings2, SlidersHorizontal, Puzzle, BarChart2, Info, Mic2, Mic } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { DEFAULT_VOICE_CONFIG } from '@/lib/constants';
+import { DEFAULT_VOICE_CONFIG, DEFAULT_TRANSCRIBER_CONFIG } from '@/lib/constants';
 
 const MAX_FILES = 10;
 const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+const voiceConfigSchema = z.object({
+  provider: z.string().min(1, "Voice provider is required"),
+  voiceId: z.string().min(1, "Voice selection is required"),
+  language: z.string().min(1, "Language is required"),
+  backgroundSound: z.enum(['default', 'office', 'cafe', 'nature', 'white_noise_brown', 'white_noise_pink', 'custom']),
+  backgroundSoundUrl: z.string().url("Must be a valid URL if provided").optional().or(z.literal('')),
+  backgroundVolume: z.number().min(0).max(1),
+  loopBackgroundSound: z.boolean(),
+  inputMinCharacters: z.number().min(0).int("Must be an integer"),
+  speakingRate: z.number().min(0.5).max(2.0),
+  pitch: z.number().min(0.5).max(2.0),
+  masterVolume: z.number().min(0).max(1),
+  punctuationBoundaries: z.array(z.string()).optional(),
+  customPunctuation: z.array(z.string()).optional(),
+  pauseDurations: z.object({
+      comma: z.number().optional(),
+      period: z.number().optional(),
+      semicolon: z.number().optional(),
+  }).optional(),
+  smartChunking: z.boolean().optional(),
+  emotion: z.string().optional(),
+  tone: z.string().optional(),
+  voiceEffects: z.object({
+      echo: z.boolean().optional(),
+      reverb: z.boolean().optional(),
+      clarityEnhancement: z.boolean().optional(),
+  }).optional(),
+  noiseReduction: z.boolean().optional(),
+  audioQuality: z.object({
+      bitrate: z.number().optional(),
+      sampleRate: z.number().optional(),
+  }).optional(),
+}).default(DEFAULT_VOICE_CONFIG);
+
+const transcriberConfigSchema = z.object({
+  provider: z.enum(['deepgram', 'openai', 'assemblyai']).default('deepgram'),
+  model: z.string().min(1, "Transcriber model is required"),
+  language: z.string().min(1, "Transcriber language is required"),
+  autoDetectLanguage: z.boolean().default(false),
+  smartFormatting: z.object({
+    enabled: z.boolean().default(true),
+    punctuation: z.boolean().default(true),
+    capitalization: z.boolean().default(true),
+    speakerLabels: z.boolean().default(false),
+    fillerWordRemoval: z.boolean().default(false),
+    profanityFilter: z.boolean().default(false),
+  }).default(DEFAULT_TRANSCRIBER_CONFIG.smartFormatting),
+  audioProcessing: z.object({
+    backgroundDenoising: z.boolean().default(false),
+    denoisingIntensity: z.enum(['light', 'medium', 'strong']).default('medium'),
+    volumeNormalization: z.boolean().default(false),
+    echoCancellation: z.boolean().default(false),
+  }).default(DEFAULT_TRANSCRIBER_CONFIG.audioProcessing),
+  qualityControl: z.object({
+    confidenceThreshold: z.number().min(0).max(1).default(0.85),
+    minWordLength: z.number().min(0).int("Min word length must be an integer").default(0),
+    customVocabulary: z.array(z.string()).optional().default([]),
+    filterLowConfidence: z.boolean().default(false),
+  }).default(DEFAULT_TRANSCRIBER_CONFIG.qualityControl),
+}).default(DEFAULT_TRANSCRIBER_CONFIG);
+
 
 const assistantConfigSchema = z.object({
   id: z.string(),
@@ -42,42 +105,10 @@ const assistantConfigSchema = z.object({
     enabled: z.boolean(),
     level: z.string().optional(),
   }).optional(),
-  voice: z.object({
-    provider: z.string().min(1, "Voice provider is required"),
-    voiceId: z.string().min(1, "Voice selection is required"),
-    language: z.string().min(1, "Language is required"),
-    backgroundSound: z.enum(['default', 'office', 'cafe', 'nature', 'white_noise_brown', 'white_noise_pink', 'custom']),
-    backgroundSoundUrl: z.string().url("Must be a valid URL if provided").optional().or(z.literal('')),
-    backgroundVolume: z.number().min(0).max(1),
-    loopBackgroundSound: z.boolean(),
-    inputMinCharacters: z.number().min(0).int("Must be an integer"),
-    speakingRate: z.number().min(0.5).max(2.0),
-    pitch: z.number().min(0.5).max(2.0),
-    masterVolume: z.number().min(0).max(1),
-    punctuationBoundaries: z.array(z.string()).optional(),
-    customPunctuation: z.array(z.string()).optional(),
-    pauseDurations: z.object({
-        comma: z.number().optional(),
-        period: z.number().optional(),
-        semicolon: z.number().optional(),
-    }).optional(),
-    smartChunking: z.boolean().optional(),
-    emotion: z.string().optional(),
-    tone: z.string().optional(),
-    voiceEffects: z.object({
-        echo: z.boolean().optional(),
-        reverb: z.boolean().optional(),
-        clarityEnhancement: z.boolean().optional(),
-    }).optional(),
-    noiseReduction: z.boolean().optional(),
-    audioQuality: z.object({
-        bitrate: z.number().optional(),
-        sampleRate: z.number().optional(),
-    }).optional(),
-  }).optional().default(DEFAULT_VOICE_CONFIG),
+  voice: voiceConfigSchema.optional(),
+  transcriber: transcriberConfigSchema.optional(),
   toolsIntegrations: z.record(z.any()).optional(),
   analysisSettings: z.record(z.any()).optional(),
-  transcriber: z.any().optional(),
 });
 
 
@@ -100,6 +131,7 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
     return {
       ...initialConfigData,
       voice: initialConfigData.voice || DEFAULT_VOICE_CONFIG,
+      transcriber: initialConfigData.transcriber || DEFAULT_TRANSCRIBER_CONFIG,
     };
   }, [initialConfigData]);
 
@@ -118,13 +150,11 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
       const timerId = setTimeout(() => { isResetting.current = false; }, 0);
       return () => clearTimeout(timerId);
     } else if (assistant && !initialConfigData) {
-      // This case handles when initialConfigData might still be undefined
-      // but an assistant exists, meaning loadConfig should create it.
-      // The next render cycle should pick up the new initialConfigData.
       const newConfData = loadConfig(assistantId, assistant.name);
-      const newConfWithDefaults = { // Ensure voice defaults are applied here too
+      const newConfWithDefaults = { 
         ...newConfData,
         voice: newConfData.voice || DEFAULT_VOICE_CONFIG,
+        transcriber: newConfData.transcriber || DEFAULT_TRANSCRIBER_CONFIG,
       };
       isResetting.current = true;
       methods.reset(newConfWithDefaults);
@@ -147,7 +177,10 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
             updateConfig(assistantId, { systemPromptEnforcement: formValue.systemPromptEnforcement });
         } else if (name.startsWith('voice.')) {
             updateConfig(assistantId, { voice: formValue.voice });
-        } else {
+        } else if (name.startsWith('transcriber.')) {
+            updateConfig(assistantId, { transcriber: formValue.transcriber });
+        }
+         else {
           const fieldNameKey = name as keyof AssistantConfig;
           // @ts-ignore
           updateConfig(assistantId, { [fieldNameKey]: valueToUpdate });
@@ -159,7 +192,13 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
 
 
   const onSubmit = (data: AssistantConfig) => {
-    updateConfig(assistantId, data);
+    // Ensure defaults are applied if optional fields are missing before saving
+    const dataToSave = {
+      ...data,
+      voice: data.voice || DEFAULT_VOICE_CONFIG,
+      transcriber: data.transcriber || DEFAULT_TRANSCRIBER_CONFIG,
+    };
+    updateConfig(assistantId, dataToSave);
     toast({
       title: "Configuration Saved",
       description: `Settings for "${data.assistantName}" have been successfully saved.`,
@@ -171,35 +210,47 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
     if (isValid) {
       methods.handleSubmit(onSubmit)();
     } else {
-      const firstErrorKey = Object.keys(methods.formState.errors)[0];
-      if (firstErrorKey) {
-        const firstError = methods.formState.errors[firstErrorKey as keyof AssistantConfig];
-        let errorMessage = "Please check the form for errors.";
-        // @ts-ignore
-        if(firstError && firstError.message) errorMessage = firstError.message;
-        // @ts-ignore
-        else if (firstError && typeof firstError === 'object' && firstErrorKey === 'voice') {
-           // @ts-ignore
-           const voiceErrorKey = Object.keys(firstError)[0];
-           // @ts-ignore
-           if (voiceErrorKey && firstError[voiceErrorKey] && firstError[voiceErrorKey].message) {
-             // @ts-ignore
-            errorMessage = `Voice setting error: ${firstError[voiceErrorKey].message}`;
-           }
-        }
+      const errors = methods.formState.errors;
+      const firstErrorKey = Object.keys(errors)[0] as keyof AssistantConfig | undefined;
+      
+      let errorMessage = "Please check the form for errors.";
 
-        toast({
-          title: "Validation Error",
-          description: errorMessage,
-          variant: "destructive",
-        });
-      } else {
-         toast({
-          title: "Validation Error",
-          description: "Please correct the errors in the form.",
-          variant: "destructive",
-        });
+      if (firstErrorKey) {
+        const errorField = errors[firstErrorKey];
+        if (errorField && 'message' in errorField && typeof errorField.message === 'string') {
+          errorMessage = errorField.message;
+        } else if (firstErrorKey === 'voice' && errorField && typeof errorField === 'object') {
+            const voiceErrorKey = Object.keys(errorField)[0] as keyof AssistantConfig['voice'];
+            // @ts-ignore
+            if (voiceErrorKey && errorField[voiceErrorKey] && errorField[voiceErrorKey].message) {
+                // @ts-ignore
+                errorMessage = `Voice setting error: ${errorField[voiceErrorKey].message}`;
+            }
+        } else if (firstErrorKey === 'transcriber' && errorField && typeof errorField === 'object') {
+            const transcriberErrorKey = Object.keys(errorField)[0] as keyof AssistantConfig['transcriber'];
+            // @ts-ignore
+            if (transcriberErrorKey && errorField[transcriberErrorKey] && errorField[transcriberErrorKey].message) {
+                // @ts-ignore
+                errorMessage = `Transcriber setting error: ${errorField[transcriberErrorKey].message}`;
+            // @ts-ignore
+            } else if (transcriberErrorKey && errorField[transcriberErrorKey] && typeof errorField[transcriberErrorKey] === 'object') {
+                // Handle nested objects within transcriber, e.g., smartFormatting
+                // @ts-ignore
+                const nestedErrorKey = Object.keys(errorField[transcriberErrorKey])[0];
+                // @ts-ignore
+                if (nestedErrorKey && errorField[transcriberErrorKey][nestedErrorKey] && errorField[transcriberErrorKey][nestedErrorKey].message) {
+                    // @ts-ignore
+                    errorMessage = `Transcriber error (${transcriberErrorKey}): ${errorField[transcriberErrorKey][nestedErrorKey].message}`;
+                }
+            }
+        }
       }
+
+      toast({
+        title: "Validation Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
     }
   };
 
@@ -232,7 +283,9 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
               <TabsTrigger value="voice" className="flex-col md:flex-row h-auto py-2 data-[state=active]:bg-background data-[state=active]:shadow-md">
                  <Mic2 className="md:mr-2 h-5 w-5" /> Voice
               </TabsTrigger>
-              <TabsTrigger value="transcriber" disabled className="flex-col md:flex-row h-auto py-2"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="md:mr-2 lucide lucide-mic"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg> Transcriber</TabsTrigger>
+              <TabsTrigger value="transcriber" className="flex-col md:flex-row h-auto py-2 data-[state=active]:bg-background data-[state=active]:shadow-md">
+                <Mic className="md:mr-2 h-5 w-5" /> Transcriber
+              </TabsTrigger>
               <TabsTrigger value="tools" disabled className="flex-col md:flex-row h-auto py-2"><Puzzle className="md:mr-2 h-5 w-5" /> Tools</TabsTrigger>
               <TabsTrigger value="analysis" disabled className="flex-col md:flex-row h-auto py-2"><BarChart2 className="md:mr-2 h-5 w-5" /> Analysis</TabsTrigger>
             </TabsList>
@@ -248,7 +301,9 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
             <TabsContent value="voice" className="mt-0">
               <VoiceSettingsTab />
             </TabsContent>
-            <TabsContent value="transcriber" className="mt-0"><div className="p-4 text-center text-muted-foreground">Transcriber options coming soon.</div></TabsContent>
+            <TabsContent value="transcriber" className="mt-0">
+              <TranscriberSettingsTab />
+            </TabsContent>
             <TabsContent value="tools" className="mt-0"><div className="p-4 text-center text-muted-foreground">Tools & Integrations coming soon.</div></TabsContent>
             <TabsContent value="analysis" className="mt-0"><div className="p-4 text-center text-muted-foreground">Analysis settings coming soon.</div></TabsContent>
           </div>

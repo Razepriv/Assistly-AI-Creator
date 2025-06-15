@@ -1,7 +1,8 @@
+
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { AssistantConfig } from '@/types';
-import { DEFAULT_ASSISTANT_CONFIG, INITIAL_ASSISTANT_CONFIGS } from '@/lib/constants';
+import { DEFAULT_ASSISTANT_CONFIG, INITIAL_ASSISTANT_CONFIGS, DEFAULT_VOICE_CONFIG, DEFAULT_TRANSCRIBER_CONFIG } from '@/lib/constants';
 
 interface ConfigState {
   configs: Record<string, AssistantConfig>;
@@ -25,7 +26,12 @@ export const useConfigStore = create<ConfigState>()(
       loadConfig: (assistantId, assistantName) => {
         const existingConfig = get().configs[assistantId];
         if (existingConfig) {
-          return existingConfig;
+          // Ensure existing configs have default voice and transcriber if they are missing
+          return {
+            ...existingConfig,
+            voice: existingConfig.voice || DEFAULT_VOICE_CONFIG,
+            transcriber: existingConfig.transcriber || DEFAULT_TRANSCRIBER_CONFIG,
+          };
         }
         // If no config exists, create a new one
         return get().createConfig(assistantId, assistantName);
@@ -33,11 +39,24 @@ export const useConfigStore = create<ConfigState>()(
       
       updateConfig: (assistantId, updates) => {
         set((state) => {
-          const currentConfig = state.configs[assistantId] || { id: assistantId, assistantName: updates.assistantName || 'Unknown Assistant', ...DEFAULT_ASSISTANT_CONFIG };
+          const currentConfig = state.configs[assistantId] || { 
+            id: assistantId, 
+            assistantName: updates.assistantName || 'Unknown Assistant', 
+            ...DEFAULT_ASSISTANT_CONFIG 
+          };
+          // Ensure voice and transcriber objects are merged correctly if partial updates are provided
+          const newVoice = updates.voice ? { ...(currentConfig.voice || DEFAULT_VOICE_CONFIG), ...updates.voice } : (currentConfig.voice || DEFAULT_VOICE_CONFIG);
+          const newTranscriber = updates.transcriber ? { ...(currentConfig.transcriber || DEFAULT_TRANSCRIBER_CONFIG), ...updates.transcriber } : (currentConfig.transcriber || DEFAULT_TRANSCRIBER_CONFIG);
+          
           return {
             configs: {
               ...state.configs,
-              [assistantId]: { ...currentConfig, ...updates },
+              [assistantId]: { 
+                ...currentConfig, 
+                ...updates,
+                voice: newVoice,
+                transcriber: newTranscriber,
+              },
             },
             isLoading: false,
             error: null,
@@ -46,7 +65,15 @@ export const useConfigStore = create<ConfigState>()(
       },
 
       getConfig: (assistantId: string) => {
-        return get().configs[assistantId];
+        const config = get().configs[assistantId];
+        if (config) {
+          return {
+            ...config,
+            voice: config.voice || DEFAULT_VOICE_CONFIG,
+            transcriber: config.transcriber || DEFAULT_TRANSCRIBER_CONFIG,
+          };
+        }
+        return undefined;
       },
 
       deleteConfig: (assistantId: string) => {
@@ -61,7 +88,7 @@ export const useConfigStore = create<ConfigState>()(
         const newConfig: AssistantConfig = {
           id: assistantId,
           assistantName: assistantName,
-          ...DEFAULT_ASSISTANT_CONFIG,
+          ...DEFAULT_ASSISTANT_CONFIG, // This now includes default voice and transcriber
         };
         set(state => ({
           configs: {
@@ -76,6 +103,9 @@ export const useConfigStore = create<ConfigState>()(
       name: 'assistly-config-storage',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ configs: state.configs }), // Only persist configs
+      // Custom migration/versioning could be added here if schema changes significantly
+      // version: 1, // example
+      // migrate: (persistedState, version) => { ... }
     }
   )
 );

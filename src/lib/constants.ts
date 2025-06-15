@@ -1,4 +1,5 @@
-import type { Assistant, AssistantConfig, VoiceConfig } from '@/types';
+
+import type { Assistant, AssistantConfig, VoiceConfig, TranscriberConfig } from '@/types';
 
 export const OPENAI_MODELS = [
   { id: 'gpt-4o', name: 'GPT-4o' },
@@ -30,6 +31,33 @@ export const DEFAULT_VOICE_CONFIG: VoiceConfig = {
   audioQuality: { bitrate: 128, sampleRate: 24000 },
 };
 
+export const DEFAULT_TRANSCRIBER_CONFIG: TranscriberConfig = {
+  provider: 'deepgram',
+  model: 'nova-2', // Example default model for Deepgram
+  language: 'en-US',
+  autoDetectLanguage: false,
+  smartFormatting: {
+    enabled: true,
+    punctuation: true,
+    capitalization: true,
+    speakerLabels: false, // Typically off by default or a premium feature
+    fillerWordRemoval: false,
+    profanityFilter: false,
+  },
+  audioProcessing: {
+    backgroundDenoising: false,
+    denoisingIntensity: 'medium',
+    volumeNormalization: false,
+    echoCancellation: false,
+  },
+  qualityControl: {
+    confidenceThreshold: 0.85, // 85%
+    minWordLength: 0, // No minimum by default
+    customVocabulary: [],
+    filterLowConfidence: false,
+  },
+};
+
 export const DEFAULT_ASSISTANT_CONFIG: Omit<AssistantConfig, 'id' | 'assistantName'> = {
   provider: 'openai',
   model: OPENAI_MODELS[0].id,
@@ -40,6 +68,7 @@ export const DEFAULT_ASSISTANT_CONFIG: Omit<AssistantConfig, 'id' | 'assistantNa
   files: [],
   systemPromptEnforcement: { enabled: false },
   voice: DEFAULT_VOICE_CONFIG,
+  transcriber: DEFAULT_TRANSCRIBER_CONFIG,
 };
 
 export const INITIAL_ASSISTANTS: Assistant[] = [
@@ -70,6 +99,11 @@ export const INITIAL_ASSISTANT_CONFIGS: Record<string, AssistantConfig> = {
     voice: {
       ...DEFAULT_VOICE_CONFIG,
       voiceId: 'adam', // Elliot gets a different default voice
+    },
+    transcriber: {
+        ...DEFAULT_TRANSCRIBER_CONFIG,
+        // Elliot might need higher accuracy
+        model: 'nova-2-general', 
     }
   },
   'sarah-1': {
@@ -83,6 +117,14 @@ export const INITIAL_ASSISTANT_CONFIGS: Record<string, AssistantConfig> = {
       ...DEFAULT_VOICE_CONFIG,
       speakingRate: 1.1, // Sarah speaks a bit faster
       pitch: 1.05, // Slightly higher pitch
+    },
+    transcriber: {
+        ...DEFAULT_TRANSCRIBER_CONFIG,
+        // Sarah might benefit from speaker labels if she dictates interviews
+        smartFormatting: {
+            ...DEFAULT_TRANSCRIBER_CONFIG.smartFormatting,
+            speakerLabels: true,
+        }
     }
   },
 };

@@ -1,3 +1,4 @@
+
 export interface VoiceConfig {
   provider: string; // e.g., 'elevenlabs', 'google', 'aws'
   voiceId: string; // Specific voice ID from the provider
@@ -43,11 +44,32 @@ export interface VoiceConfig {
 }
 
 export interface TranscriberConfig {
-  provider: string; // e.g., 'deepgram', 'assemblyai'
-  model: string;
-  language: string;
-  // other transcriber-specific settings
+  provider: 'deepgram' | 'openai' | 'assemblyai'; // Example providers
+  model: string; // e.g., 'nova-2', 'whisper-1'
+  language: string; // e.g., 'en-US', 'auto'
+  autoDetectLanguage: boolean;
+  smartFormatting: {
+    enabled: boolean;
+    punctuation: boolean;
+    capitalization: boolean;
+    speakerLabels: boolean;
+    fillerWordRemoval: boolean;
+    profanityFilter: boolean;
+  };
+  audioProcessing: {
+    backgroundDenoising: boolean;
+    denoisingIntensity: 'light' | 'medium' | 'strong';
+    volumeNormalization: boolean;
+    echoCancellation: boolean;
+  };
+  qualityControl: {
+    confidenceThreshold: number; // 0.0 - 1.0
+    minWordLength: number;
+    customVocabulary: string[]; // Array of custom words/phrases
+    filterLowConfidence: boolean;
+  };
 }
+
 
 export interface Assistant {
   id: string;
