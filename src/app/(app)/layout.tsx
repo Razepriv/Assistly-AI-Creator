@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from 'react';
@@ -14,7 +15,7 @@ export default function AppLayout({
   return (
     <SidebarProvider defaultOpen={true}>
       <div className="flex min-h-screen w-full">
-        <Sidebar collapsible="icon" className="w-72 data-[collapsible=icon]:w-12 transition-[width] duration-300 ease-in-out">
+        <Sidebar collapsible="icon"> {/* Removed width classes here */}
           <AppSidebar />
         </Sidebar>
         <SidebarInset className="flex flex-1 flex-col">
