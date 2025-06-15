@@ -1,17 +1,17 @@
 
 "use client";
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ModelConfigTab from './model-config-tab';
 import AdvancedSettingsTab from './advanced-settings-tab';
-import VoiceSettingsTab from './voice-settings-tab'; // Import the new tab
+import VoiceSettingsTab from './voice-settings-tab';
 import { useForm, FormProvider } from 'react-hook-form';
 import type { AssistantConfig } from '@/types';
 import { useConfigStore } from '@/store/config-store';
 import { useAssistantStore } from '@/store/assistant-store';
 import { Button } from '@/components/ui/button';
-import { Save, Settings2, SlidersHorizontal, Puzzle, BarChart2, Info, Mic2 } from 'lucide-react'; // Added Mic2 for Voice
+import { Save, Settings2, SlidersHorizontal, Puzzle, BarChart2, Info, Mic2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -21,7 +21,6 @@ const MAX_FILES = 10;
 const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
-// Zod schema for validation
 const assistantConfigSchema = z.object({
   id: z.string(),
   assistantName: z.string().min(1, "Assistant name is required"),
@@ -78,7 +77,7 @@ const assistantConfigSchema = z.object({
   }).optional().default(DEFAULT_VOICE_CONFIG),
   toolsIntegrations: z.record(z.any()).optional(),
   analysisSettings: z.record(z.any()).optional(),
-  transcriber: z.any().optional(), // Placeholder for now
+  transcriber: z.any().optional(),
 });
 
 
@@ -96,12 +95,13 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
   const assistant = getAssistantById(assistantId);
   const initialConfigData = getConfig(assistantId) || (assistant ? loadConfig(assistantId, assistant.name) : undefined);
 
-  const initialConfig = initialConfigData
-    ? {
-        ...initialConfigData,
-        voice: initialConfigData.voice || DEFAULT_VOICE_CONFIG,
-      }
-    : undefined;
+  const initialConfig = useMemo(() => {
+    if (!initialConfigData) return undefined;
+    return {
+      ...initialConfigData,
+      voice: initialConfigData.voice || DEFAULT_VOICE_CONFIG,
+    };
+  }, [initialConfigData]);
 
   const methods = useForm<AssistantConfig>({
     resolver: zodResolver(assistantConfigSchema),
@@ -118,17 +118,21 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
       const timerId = setTimeout(() => { isResetting.current = false; }, 0);
       return () => clearTimeout(timerId);
     } else if (assistant && !initialConfigData) {
+      // This case handles when initialConfigData might still be undefined
+      // but an assistant exists, meaning loadConfig should create it.
+      // The next render cycle should pick up the new initialConfigData.
       const newConfData = loadConfig(assistantId, assistant.name);
-      const newConf = {
+      const newConfWithDefaults = { // Ensure voice defaults are applied here too
         ...newConfData,
         voice: newConfData.voice || DEFAULT_VOICE_CONFIG,
-      }
+      };
       isResetting.current = true;
-      methods.reset(newConf);
+      methods.reset(newConfWithDefaults);
       const timerId = setTimeout(() => { isResetting.current = false; }, 0);
       return () => clearTimeout(timerId);
     }
   }, [assistantId, initialConfig, initialConfigData, methods, assistant, loadConfig]);
+
 
   useEffect(() => {
     const subscription = methods.watch((formValue, { name, type }) => {
@@ -137,14 +141,16 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
       }
 
       if (type === 'change' && name) {
-        if (name.startsWith('systemPromptEnforcement.')) {
-          updateConfig(assistantId, { systemPromptEnforcement: formValue.systemPromptEnforcement });
+        // @ts-ignore
+        const valueToUpdate = formValue[name as keyof AssistantConfig];
+         if (name.startsWith('systemPromptEnforcement.')) {
+            updateConfig(assistantId, { systemPromptEnforcement: formValue.systemPromptEnforcement });
         } else if (name.startsWith('voice.')) {
-          updateConfig(assistantId, { voice: formValue.voice });
+            updateConfig(assistantId, { voice: formValue.voice });
         } else {
           const fieldNameKey = name as keyof AssistantConfig;
           // @ts-ignore
-          updateConfig(assistantId, { [fieldNameKey]: formValue[fieldNameKey] });
+          updateConfig(assistantId, { [fieldNameKey]: valueToUpdate });
         }
       }
     });
@@ -224,7 +230,7 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
                 <SlidersHorizontal className="md:mr-2 h-5 w-5" /> Advanced
               </TabsTrigger>
               <TabsTrigger value="voice" className="flex-col md:flex-row h-auto py-2 data-[state=active]:bg-background data-[state=active]:shadow-md">
-                 <Mic2 className="md:mr-2 h-5 w-5" /> Voice {/* Updated Icon and enabled */}
+                 <Mic2 className="md:mr-2 h-5 w-5" /> Voice
               </TabsTrigger>
               <TabsTrigger value="transcriber" disabled className="flex-col md:flex-row h-auto py-2"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="md:mr-2 lucide lucide-mic"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg> Transcriber</TabsTrigger>
               <TabsTrigger value="tools" disabled className="flex-col md:flex-row h-auto py-2"><Puzzle className="md:mr-2 h-5 w-5" /> Tools</TabsTrigger>
@@ -240,7 +246,7 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
               <AdvancedSettingsTab />
             </TabsContent>
             <TabsContent value="voice" className="mt-0">
-              <VoiceSettingsTab /> {/* Render the new tab content */}
+              <VoiceSettingsTab />
             </TabsContent>
             <TabsContent value="transcriber" className="mt-0"><div className="p-4 text-center text-muted-foreground">Transcriber options coming soon.</div></TabsContent>
             <TabsContent value="tools" className="mt-0"><div className="p-4 text-center text-muted-foreground">Tools & Integrations coming soon.</div></TabsContent>
