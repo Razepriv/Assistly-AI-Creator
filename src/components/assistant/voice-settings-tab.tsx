@@ -1,8 +1,9 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFormContext, Controller } from 'react-hook-form';
+import { useFormState, useFormStatus } from 'react-dom';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
@@ -11,26 +12,51 @@ import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { Volume2, Settings, SlidersHorizontal, ListFilter, Palette, Sparkles, AlertCircle, Loader2, Info, UploadCloud, FileText, X } from 'lucide-react';
+import { Volume2, Settings, SlidersHorizontal, ListFilter, Palette, Sparkles, AlertCircle, Loader2, Info, UploadCloud, FileText, X, PlayCircle } from 'lucide-react';
 import type { AssistantConfig, VoiceConfig } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 import { synthesizeSpeech, type SynthesizeSpeechInput } from '@/ai/flows/synthesize-speech-flow';
+import { synthesizeElevenLabsSpeech, type ElevenLabsSpeechState } from '@/app/actions/elevenlabs-actions';
 
-// Mock data - replace with actual API calls later
-const VOICE_PROVIDERS = [{ id: 'elevenlabs', name: 'ElevenLabs' }]; // Add more if supported
-const ELEVENLABS_VOICES = [ // This would be dynamically loaded in a real app
-  { id: 'bella', name: 'Bella (F, American, Standard)' },
-  { id: 'adam', name: 'Adam (M, American, Deep)' },
-  { id: 'antoni', name: 'Antoni (M, American, Well-rounded)' },
-  { id: 'rachel', name: 'Rachel (F, American, Calm)' },
-  // Add more known voices or a placeholder for dynamic loading
+
+const VOICE_PROVIDERS = [{ id: 'elevenlabs', name: 'ElevenLabs' }];
+const ELEVENLABS_VOICES = [ 
+  { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel (F, American, Calm)' },
+  { id: '29vD33N1CtxCmqQRPOHJ', name: 'Drew (M, American, Conversational)' },
+  { id: '2EiwWnXFnvU5JabPnv8n', name: 'Clyde (M, American, Deep)' },
+  { id: '5Q0t7uMcjvnagumLfvZi', name: 'Paul (M, American, Authoritative)' },
+  { id: 'AZnzlk1XvdvUeBnXmlld', name: 'Domi (F, American, Strong)' },
+  { id: 'CYw3kZ02Hs0563khs1Fj', name: 'Dave (M, British, Conversational)' },
+  { id: 'D38z5RcWu1voky8WS1ja', name: 'Fin (M, British, Deep)' },
+  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah (F, American, Sweet)' },
+  { id: 'ErXwobaYiN019P7OCKZ9', name: 'Antoni (M, American, Well-rounded)' },
+  { id: 'GBv7mTt0atIp3Br8iCZE', name: 'Thomas (M, American, Calm)' },
+  { id: 'MF3mGyEYCl7XYWbV9V6O', name: 'Charlie (M, Australian, Casual)' },
+  { id: 'SOYHLrjzK2X1ezoPC6cr', name: 'George (M, British, Raspy)' },
+  { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Matthew (M, British, Full-bodied)' },
+  { id: 'ThT5KcBeYPX3keUQqHPh', name: 'Dorothy (F, British, Pleasant)' },
+  { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Bella (F, American, Soft)' },
+  { id: 'VR6AewLTigWG4xSOukaG', name: 'Arnold (M, American, Crisp)' },
+  { id: 'VOYVp58_m8j7l6n9042i', name: 'Freya (F, American, Overhyped)'},
+  { id: 'Yko7PKHZNXotIFUBG7I9', name: 'Grace (F, American, Soft)' },
+  { id: 'ZQe5CZNOzWTMGPFeQj2S', name: 'Daniel (M, British, Deep)' },
+  { id: 'XrExE9yKIg1WjnnlVkGX', name: 'James (M, British, Old)' },
+  { id: 'bVMeCyTHy58xNoL34h3p', name: 'Gigi (F, American, Childlish)' },
+  { id: 'g5CIjZEefAph4nQFvHAz', name: 'Liam (M, American, Neutral)' },
+  { id: 'jBpfuIE2acCO8z3wKNLl', name: 'Nicole (F, American, Whispering)' },
+  { id: 'jsCqWAovK2LkecY7zX02', name: 'Bill (M, American, Strong)' },
+  { id: 'piTKgcLEGmPE4e6mEKli', name: 'Adam (M, American, Deep)' },
+  { id: 'pqHkRDMhZ9xky8V6UeVD', name: 'Alice (F, British, Sweet)' },
+  { id: 't0jbNlBVZ17f02VDIeMI', name: 'Jeremy (M, American, Raspy)' },
+  { id: 'z9fAnxQcWzI9SwUxBBKk', name: 'Glinda (F, American, Soft)' },
+  { id: 'zcAOhNBS3c14rBihAFp1', name: 'Joseph (M, British, Neutral)' },
+  { id: 'zqn6B32R982AIa32P4zD', name: 'Serena (F, American, Pleasant)' },
 ];
-const LANGUAGES = [ // This would also be dynamic based on provider/voice
+const LANGUAGES = [ 
   { id: 'en-US', name: 'English (US)' },
   { id: 'en-GB', name: 'English (UK)' },
   { id: 'es-ES', name: 'Español (España)' },
   { id: 'fr-FR', name: 'Français (France)' },
-  // Add more
 ];
 const BACKGROUND_SOUNDS = [
   { id: 'default', name: 'Default (No Background)' },
@@ -42,7 +68,7 @@ const BACKGROUND_SOUNDS = [
   { id: 'custom', name: 'Custom URL' },
 ];
 
-const EMOTIONS = [ // Provider-specific, example
+const EMOTIONS = [ 
     { id: 'neutral', name: 'Neutral' },
     { id: 'happy', name: 'Happy' },
     { id: 'sad', name: 'Sad' },
@@ -51,7 +77,7 @@ const EMOTIONS = [ // Provider-specific, example
     { id: 'friendly', name: 'Friendly' },
 ];
 
-const TONES = [ // Provider-specific, example
+const TONES = [ 
     { id: 'neutral', name: 'Neutral' },
     { id: 'professional', name: 'Professional' },
     { id: 'casual', name: 'Casual' },
@@ -60,17 +86,62 @@ const TONES = [ // Provider-specific, example
 ];
 
 const SAMPLE_PREVIEW_TEXT = "Hello, this is a sample of my voice. I hope you like the way I sound with the current settings!";
+const ACTUAL_PREVIEW_TEXT = "This is an actual audio preview generated by ElevenLabs.";
+
+function SubmitActualPreviewButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" variant="default" disabled={pending} className="w-full md:w-auto">
+      {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlayCircle className="mr-2 h-4 w-4" />}
+      Play Actual Preview (ElevenLabs)
+    </Button>
+  );
+}
+
 
 export default function VoiceSettingsTab() {
-  const { control, watch, setValue, formState: { errors } } = useFormContext<AssistantConfig>();
+  const { control, watch, setValue, getValues, formState: { errors } } = useFormContext<AssistantConfig>();
   const { toast } = useToast();
-  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [isSimulatingPreview, setIsSimulatingPreview] = useState(false);
   const [customPunctuationInput, setCustomPunctuationInput] = useState('');
-
+  const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
 
   const voiceConfig = watch('voice') as VoiceConfig;
   const backgroundSoundType = watch('voice.backgroundSound');
   const customPunctuationList = watch('voice.customPunctuation', []);
+
+  const initialElevenLabsState: ElevenLabsSpeechState = { success: false };
+  const [elevenLabsState, formAction] = useFormState(synthesizeElevenLabsSpeech, initialElevenLabsState);
+
+
+  useEffect(() => {
+    if (elevenLabsState.success && elevenLabsState.audioBase64) {
+      if (currentAudio) {
+        currentAudio.pause();
+      }
+      const audio = new Audio(`data:audio/mpeg;base64,${elevenLabsState.audioBase64}`);
+      setCurrentAudio(audio);
+      audio.play().catch(e => {
+        console.error("Error playing audio:", e);
+        toast({
+          title: "Audio Playback Error",
+          description: "Could not play the synthesized audio. Check console for details.",
+          variant: "destructive",
+        });
+      });
+      toast({
+        title: "Audio Preview Playing",
+        description: "ElevenLabs audio preview is now playing.",
+      });
+    } else if (!elevenLabsState.success && elevenLabsState.error) {
+      toast({
+        title: "ElevenLabs Preview Error",
+        description: elevenLabsState.error,
+        variant: "destructive",
+      });
+    }
+  }, [elevenLabsState, toast, currentAudio]);
+
 
   const handleAddCustomPunctuation = () => {
     if (customPunctuationInput.trim() && !customPunctuationList.includes(customPunctuationInput.trim())) {
@@ -83,7 +154,7 @@ export default function VoiceSettingsTab() {
     setValue('voice.customPunctuation', customPunctuationList.filter(p => p !== puncToRemove), { shouldDirty: true });
   };
 
-  const handlePreviewVoice = async () => {
+  const handleSimulatedPreviewVoice = async () => {
     if (!voiceConfig) {
       toast({
         title: "Configuration Error",
@@ -92,7 +163,7 @@ export default function VoiceSettingsTab() {
       });
       return;
     }
-    setIsPreviewing(true);
+    setIsSimulatingPreview(true);
     try {
       const input: SynthesizeSpeechInput = {
         textToSynthesize: SAMPLE_PREVIEW_TEXT,
@@ -107,7 +178,7 @@ export default function VoiceSettingsTab() {
       toast({
         title: "Voice Preview Simulation",
         description: result.synthesizedSpeechDescription,
-        duration: 10000, // Longer duration for reading detailed description
+        duration: 10000, 
       });
     } catch (error) {
       console.error("Error simulating speech synthesis:", error);
@@ -117,13 +188,12 @@ export default function VoiceSettingsTab() {
         variant: "destructive",
       });
     } finally {
-      setIsPreviewing(false);
+      setIsSimulatingPreview(false);
     }
   };
 
   return (
     <div className="space-y-8 p-1">
-      {/* Voice Configuration Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><Volume2 className="mr-2 h-5 w-5 text-primary" /> Voice Configuration</CardTitle>
@@ -148,7 +218,7 @@ export default function VoiceSettingsTab() {
                 )}
               />
               {errors.voice?.provider && <p className="text-sm text-destructive mt-1">{errors.voice.provider.message}</p>}
-              <p className="text-xs text-muted-foreground mt-1">Dynamic provider/voice loading coming soon.</p>
+              <p className="text-xs text-muted-foreground mt-1">ElevenLabs is currently the only provider.</p>
             </div>
             <div>
               <Label htmlFor="voice.voiceId">Voice</Label>
@@ -174,7 +244,7 @@ export default function VoiceSettingsTab() {
                 name="voice.language"
                 control={control}
                 render={({ field }) => (
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value} disabled>
                     <SelectTrigger id="voice.language" className="mt-1">
                       <SelectValue placeholder="Select language" />
                     </SelectTrigger>
@@ -185,17 +255,27 @@ export default function VoiceSettingsTab() {
                 )}
               />
               {errors.voice?.language && <p className="text-sm text-destructive mt-1">{errors.voice.language.message}</p>}
+               <p className="text-xs text-muted-foreground mt-1">Language is inferred by ElevenLabs voice choice.</p>
             </div>
           </div>
-          <Button type="button" variant="outline" onClick={handlePreviewVoice} disabled={isPreviewing} className="w-full md:w-auto">
-            {isPreviewing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Volume2 className="mr-2 h-4 w-4" />}
-            Simulate Voice Preview (Sample Text)
-          </Button>
-           {isPreviewing && <p className="text-sm text-muted-foreground mt-2">Generating simulated voice description...</p>}
+          <div className="space-y-3 md:space-y-0 md:flex md:space-x-3">
+            <Button type="button" variant="outline" onClick={handleSimulatedPreviewVoice} disabled={isSimulatingPreview} className="w-full md:w-auto">
+              {isSimulatingPreview ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Volume2 className="mr-2 h-4 w-4" />}
+              Simulate Voice Preview (Description)
+            </Button>
+            {isSimulatingPreview && <p className="text-sm text-muted-foreground mt-2 md:mt-0 md:ml-2 self-center">Generating simulated voice description...</p>}
+            
+            <form action={formAction} className="w-full md:w-auto">
+              <input type="hidden" name="text" value={ACTUAL_PREVIEW_TEXT} />
+              <input type="hidden" name="voiceId" value={voiceConfig?.voiceId || ''} />
+              {/* Add other relevant voice params if needed by API */}
+              {/* Example: <input type="hidden" name="modelId" value={voiceConfig?.elevenLabsModelId || 'eleven_multilingual_v2'} /> */}
+              <SubmitActualPreviewButton />
+            </form>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Additional Configuration Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><Settings className="mr-2 h-5 w-5 text-primary" /> Additional Configuration</CardTitle>
@@ -317,7 +397,6 @@ export default function VoiceSettingsTab() {
         </CardContent>
       </Card>
       
-      {/* Punctuation Boundaries Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><ListFilter className="mr-2 h-5 w-5 text-primary" /> Punctuation & Chunking</CardTitle>
@@ -394,7 +473,6 @@ export default function VoiceSettingsTab() {
         </CardContent>
       </Card>
 
-      {/* Advanced Voice Features Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><Palette className="mr-2 h-5 w-5 text-primary" /> Emotion, Tone & Effects</CardTitle>
@@ -476,9 +554,8 @@ export default function VoiceSettingsTab() {
         <div>
             <h4 className="font-semibold">Developer Note:</h4>
             <p className="text-sm">
-                This interface provides controls for a wide range of voice synthesis features.
-                Actual real-time audio preview, dynamic voice/language loading based on provider, and the precise effect of advanced settings (emotion, tone, custom punctuation, effects) require deep integration with specific TTS provider APIs (e.g., ElevenLabs, Google Cloud TTS, AWS Polly).
-                The current "Simulate Voice Preview" uses an AI model to describe the sound. Full implementation of these features is a significant undertaking.
+                The "Play Actual Preview" button now uses your ElevenLabs API key to generate real audio.
+                Dynamic voice/language loading, custom punctuation effects, and the precise effect of advanced settings (emotion, tone, effects) require deeper integration with specific TTS provider APIs.
             </p>
         </div>
       </div>
