@@ -3,7 +3,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useFormContext, Controller } from 'react-hook-form';
-import { useActionState, useFormStatus } from 'react'; // Changed from react-dom
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
@@ -426,6 +427,7 @@ export default function VoiceSettingsTab() {
                 <div className="flex items-center gap-2 mt-1">
                     <Input
                         id="customPunctuationInput"
+                        type="text"
                         value={customPunctuationInput}
                         onChange={(e) => setCustomPunctuationInput(e.target.value)}
                         placeholder="e.g., -- or ..."
@@ -562,3 +564,4 @@ export default function VoiceSettingsTab() {
     </div>
   );
 }
+
