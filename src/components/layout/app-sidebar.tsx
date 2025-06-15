@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -19,7 +20,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
+  // AlertDialogTrigger, // No longer directly used by AssistantNavItem here
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import type { Assistant } from '@/types';
@@ -199,18 +200,15 @@ function AssistantNavItem({ assistant, isActive, onClick, onDelete }: AssistantN
         <Bot className="mr-2 h-4 w-4 flex-shrink-0" />
         <span className="truncate max-w-[150px]">{assistant.name}</span>
       </Button>
-      <AlertDialogTrigger asChild>
-        <Button
-            variant="ghost"
-            size="icon"
-            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 opacity-0 group-hover:opacity-100 focus:opacity-100"
-            onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            aria-label={`Delete ${assistant.name}`}
-          >
-          <Trash2 className="h-4 w-4 text-destructive" />
-        </Button>
-      </AlertDialogTrigger>
+      <Button
+          variant="ghost"
+          size="icon"
+          className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 opacity-0 group-hover:opacity-100 focus:opacity-100"
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          aria-label={`Delete ${assistant.name}`}
+        >
+        <Trash2 className="h-4 w-4 text-destructive" />
+      </Button>
     </div>
   );
 }
-
