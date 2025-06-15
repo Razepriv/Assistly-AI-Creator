@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useCallback } from 'react';
@@ -199,7 +200,7 @@ export default function AdvancedSettingsTab() {
                     <span className="truncate" title={file.name}>{file.name}</span>
                     <span className="ml-2 text-xs text-muted-foreground">({(file.size / 1024).toFixed(1)} KB)</span>
                   </div>
-                  <Button variant="ghost" size="icon" onClick={() => removeFile(index)} className="h-6 w-6">
+                  <Button type="button" variant="ghost" size="icon" onClick={() => removeFile(index)} className="h-6 w-6">
                     <X className="h-4 w-4 text-destructive" />
                   </Button>
                 </li>

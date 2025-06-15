@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -79,7 +80,7 @@ export default function SuggestedFiles() {
           <div className="flex flex-col items-center justify-center p-6 text-destructive">
             <AlertTriangle className="mr-2 h-5 w-5" />
             <span>{error}</span>
-            <Button onClick={fetchSuggestions} variant="link" className="mt-2">Try again</Button>
+            <Button type="button" onClick={fetchSuggestions} variant="link" className="mt-2">Try again</Button>
           </div>
         )}
         {!isLoading && !error && suggestions.length === 0 && initialLoadDone && (
@@ -108,6 +109,7 @@ export default function SuggestedFiles() {
             </p>
         )}
         <Button 
+          type="button"
           onClick={fetchSuggestions} 
           disabled={isLoading || !assistantName || !systemPrompt} 
           className="mt-4 w-full"

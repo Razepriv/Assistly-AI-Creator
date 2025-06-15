@@ -438,7 +438,7 @@ export default function VoiceSettingsTab() {
                         {customPunctuationList.map(punc => (
                             <span key={punc} className="inline-flex items-center px-2 py-1 bg-muted text-muted-foreground rounded-md text-sm">
                                 {punc}
-                                <Button variant="ghost" size="icon" onClick={() => handleRemoveCustomPunctuation(punc)} className="ml-1 h-5 w-5">
+                                <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveCustomPunctuation(punc)} className="ml-1 h-5 w-5">
                                     <X className="h-3 w-3" />
                                 </Button>
                             </span>
