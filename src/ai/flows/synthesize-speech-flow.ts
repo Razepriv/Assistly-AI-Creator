@@ -10,7 +10,7 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import type { VoiceConfig } from '@/types';
+import type { VoiceConfig } from '@/types'; // VoiceConfig includes emotion and tone
 
 const SynthesizeSpeechInputSchema = z.object({
   textToSynthesize: z.string().describe('The text to be synthesized.'),
@@ -18,11 +18,16 @@ const SynthesizeSpeechInputSchema = z.object({
   language: z.string().describe('The language of the voice.'),
   speakingRate: z.number().min(0.5).max(2.0).describe('The speaking rate (e.g., 1.0 for normal).'),
   pitch: z.number().min(0.5).max(2.0).describe('The pitch of the voice (e.g., 1.0 for normal).'),
+  emotion: z.string().optional().describe('The emotion of the voice (e.g., neutral, happy, sad).'),
+  tone: z.string().optional().describe('The tone of the voice (e.g., professional, casual).'),
+  // Add other relevant parameters from VoiceConfig as needed for simulation
+  // For instance, how would specific punctuation pauses be described?
+  // For now, focusing on primary vocal characteristics, emotion, and tone.
 });
 export type SynthesizeSpeechInput = z.infer<typeof SynthesizeSpeechInputSchema>;
 
 const SynthesizeSpeechOutputSchema = z.object({
-  synthesizedSpeechDescription: z.string().describe('A description of how the synthesized speech would sound.'),
+  synthesizedSpeechDescription: z.string().describe('A detailed description of how the synthesized speech would sound, considering all parameters.'),
   // In a real scenario, this might include an audioUrl or audioDataUri
 });
 export type SynthesizeSpeechOutput = z.infer<typeof SynthesizeSpeechOutputSchema>;
@@ -36,16 +41,19 @@ const prompt = ai.definePrompt({
   input: {schema: SynthesizeSpeechInputSchema},
   output: {schema: SynthesizeSpeechOutputSchema},
   prompt: `You are a voice synthesis simulation engine.
-  Given the following text and voice parameters, provide a brief, engaging description of how this text would sound if spoken with those characteristics.
-  Do not attempt to actually synthesize audio. Focus on describing the vocal quality, tone, and delivery.
+  Your task is to provide a vivid and engaging description of how a given text would sound if spoken with specific voice characteristics, including emotion and tone.
+  Do not attempt to actually synthesize audio. Focus on describing the vocal quality, delivery, emotional inflection, and overall auditory impression.
+  Consider how punctuation, speaking rate, and pitch influence the final sound.
 
   Text to Synthesize: {{{textToSynthesize}}}
   Voice ID: {{{voiceId}}}
   Language: {{{language}}}
   Speaking Rate: {{{speakingRate}}}x
   Pitch: {{{pitch}}}x
+  {{#if emotion}}Emotion: {{{emotion}}}{{/if}}
+  {{#if tone}}Tone: {{{tone}}}{{/if}}
 
-  Describe the resulting speech:`,
+  Based on these parameters, describe the resulting speech:`,
 });
 
 const synthesizeSpeechFlow = ai.defineFlow(

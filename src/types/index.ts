@@ -16,30 +16,31 @@ export interface VoiceConfig {
   pitch: number; // 0.5 - 2.0 (often represents a factor)
   masterVolume: number; // 0-1 (represents 0-100%)
 
-  // Punctuation Boundaries (Placeholders for now)
-  punctuationBoundaries?: string[];
-  customPunctuation?: string[];
-  pauseDurations?: {
-    comma?: number;
-    period?: number;
-    semicolon?: number;
+  // Punctuation Boundaries
+  punctuationBoundaries: string[]; // e.g., ['.', '?', '!']
+  customPunctuation: string[]; // User-defined punctuation for breaks
+  pauseDurations: { // Pause length in ms
+    comma: number;
+    period: number;
+    semicolon: number;
+    // Potentially more custom punctuation pauses
   };
-  smartChunking?: boolean;
+  smartChunking: boolean; // Toggle for intelligent sentence/phrase breaking
 
-  // Emotion & Tone (Placeholders for now)
-  emotion?: string;
-  tone?: string;
+  // Emotion & Tone Settings
+  emotion: string; // e.g., 'neutral', 'happy', 'sad', 'excited', provider-specific
+  tone: string; // e.g., 'professional', 'casual', 'friendly', 'authoritative', provider-specific
 
-  // Real-time Voice Processing (Placeholders for now)
-  voiceEffects?: {
-    echo?: boolean;
-    reverb?: boolean;
-    clarityEnhancement?: boolean;
+  // Real-time Voice Processing & Effects
+  voiceEffects: {
+    echo: boolean; // 0-1 intensity or boolean
+    reverb: boolean; // 0-1 intensity or boolean
+    clarityEnhancement: boolean; // or specific algorithm
   };
-  noiseReduction?: boolean;
-  audioQuality?: {
-    bitrate?: number;
-    sampleRate?: number;
+  noiseReduction: boolean; // Toggle for background noise filtering
+  audioQuality: { // Provider-specific options
+    bitrate: number; // e.g., 128, 192, 256 kbps
+    sampleRate: number; // e.g., 24000, 44100, 48000 Hz
   };
 }
 
@@ -97,8 +98,8 @@ export interface AssistantConfig {
   maxTokens: number;
   temperature: number; // 0.0 - 1.0
   files: FileMetadata[]; // Store file metadata, actual files handled separately
-  voice?: VoiceConfig;
-  transcriber?: TranscriberConfig;
+  voice: VoiceConfig; // Made non-optional
+  transcriber: TranscriberConfig; // Made non-optional
   // Placeholder for other tab settings
   toolsIntegrations?: Record<string, any>;
   analysisSettings?: Record<string, any>;

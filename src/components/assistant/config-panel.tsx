@@ -10,18 +10,19 @@ import TranscriberSettingsTab from './transcriber-settings-tab';
 import { useForm, FormProvider } from 'react-hook-form';
 import type { AssistantConfig } from '@/types';
 import { useConfigStore } from '@/store/config-store';
-import { useAssistantStore } from '@/store/assistant-store';
+// import { useAssistantStore } from '@/store/assistant-store'; // Not directly used for name, editable name handles that
 import { Button } from '@/components/ui/button';
 import { Save, Settings2, SlidersHorizontal, Puzzle, BarChart2, Info, Mic2, Mic } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { DEFAULT_VOICE_CONFIG, DEFAULT_TRANSCRIBER_CONFIG } from '@/lib/constants';
+import { DEFAULT_ASSISTANT_CONFIG, DEFAULT_VOICE_CONFIG, DEFAULT_TRANSCRIBER_CONFIG } from '@/lib/constants';
 
 const MAX_FILES = 10;
 const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
+// Zod schema for VoiceConfig
 const voiceConfigSchema = z.object({
   provider: z.string().min(1, "Voice provider is required"),
   voiceId: z.string().min(1, "Voice selection is required"),
@@ -34,35 +35,36 @@ const voiceConfigSchema = z.object({
   speakingRate: z.number().min(0.5).max(2.0),
   pitch: z.number().min(0.5).max(2.0),
   masterVolume: z.number().min(0).max(1),
-  punctuationBoundaries: z.array(z.string()).optional(),
-  customPunctuation: z.array(z.string()).optional(),
+  punctuationBoundaries: z.array(z.string()).default(['.', '?', '!']),
+  customPunctuation: z.array(z.string()).default([]),
   pauseDurations: z.object({
-      comma: z.number().optional(),
-      period: z.number().optional(),
-      semicolon: z.number().optional(),
-  }).optional(),
-  smartChunking: z.boolean().optional(),
-  emotion: z.string().optional(),
-  tone: z.string().optional(),
+      comma: z.number().default(150),
+      period: z.number().default(300),
+      semicolon: z.number().default(250),
+  }).default({ comma: 150, period: 300, semicolon: 250 }),
+  smartChunking: z.boolean().default(true),
+  emotion: z.string().default('neutral'),
+  tone: z.string().default('neutral'),
   voiceEffects: z.object({
-      echo: z.boolean().optional(),
-      reverb: z.boolean().optional(),
-      clarityEnhancement: z.boolean().optional(),
-  }).optional(),
-  noiseReduction: z.boolean().optional(),
+      echo: z.boolean().default(false),
+      reverb: z.boolean().default(false),
+      clarityEnhancement: z.boolean().default(true),
+  }).default({ echo: false, reverb: false, clarityEnhancement: true }),
+  noiseReduction: z.boolean().default(false),
   audioQuality: z.object({
-      bitrate: z.number().optional(),
-      sampleRate: z.number().optional(),
-  }).optional(),
+      bitrate: z.number().default(128),
+      sampleRate: z.number().default(24000),
+  }).default({ bitrate: 128, sampleRate: 24000 }),
 }).default(DEFAULT_VOICE_CONFIG).refine(data => {
     if (data.backgroundSound === 'custom' && (!data.backgroundSoundUrl || data.backgroundSoundUrl.trim() === '')) {
-      return false; // Invalid: custom sound selected but no URL
+      return false; 
     }
     return true;
   }, {
     message: "Custom background sound URL is required when 'Custom URL' is selected.",
-    path: ["backgroundSoundUrl"], // Path to the field to attach the error message
+    path: ["backgroundSoundUrl"], 
 });
+
 
 const transcriberConfigSchema = z.object({
   provider: z.enum(['deepgram', 'openai', 'assemblyai']).default('deepgram'),
@@ -95,7 +97,7 @@ const transcriberConfigSchema = z.object({
 const assistantConfigSchema = z.object({
   id: z.string(),
   assistantName: z.string().min(1, "Assistant name is required"),
-  provider: z.literal("openai"),
+  provider: z.literal("openai"), // Only OpenAI for LLM provider for now
   model: z.string().min(1, "Model selection is required"),
   firstMessage: z.string().min(1, "First message is required"),
   systemPrompt: z.string().min(10, "System prompt must be at least 10 characters"),
@@ -106,15 +108,15 @@ const assistantConfigSchema = z.object({
       name: z.string(),
       type: z.string(),
       size: z.number().max(MAX_FILE_SIZE_BYTES, `File size cannot exceed ${MAX_FILE_SIZE_MB}MB`),
-      dataUri: z.string().optional(), // dataUri is optional as it's read client-side
+      dataUri: z.string().optional(), 
     })
   ).max(MAX_FILES, `Cannot upload more than ${MAX_FILES} files`).optional().default([]),
   systemPromptEnforcement: z.object({
-    enabled: z.boolean(),
-    level: z.string().optional(),
-  }).optional(),
-  voice: voiceConfigSchema.optional().default(DEFAULT_VOICE_CONFIG),
-  transcriber: transcriberConfigSchema.optional().default(DEFAULT_TRANSCRIBER_CONFIG),
+    enabled: z.boolean().default(false),
+    level: z.string().optional().default("moderate"),
+  }).optional().default({ enabled: false, level: "moderate" }),
+  voice: voiceConfigSchema, // Use the detailed voice schema
+  transcriber: transcriberConfigSchema, // Use the detailed transcriber schema
   toolsIntegrations: z.record(z.any()).optional(),
   analysisSettings: z.record(z.any()).optional(),
 });
@@ -127,29 +129,34 @@ interface ConfigPanelProps {
 export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
   const { toast } = useToast();
   const getConfig = useConfigStore((state) => state.getConfig);
-  // loadConfig is primarily used by ConfigPanelClientWrapper to ensure config exists in store.
-  // Here, we mostly rely on getConfig to get the data.
   const updateConfig = useConfigStore((state) => state.updateConfig);
   
-  // Get the raw config data from the store. This will be stable if the store's getConfig is stable.
   const initialConfigData = getConfig(assistantId);
 
-  // Memoize the config that will be used to reset the form.
-  // This should only change if initialConfigData itself changes meaningfully.
   const initialConfig = useMemo(() => {
     if (!initialConfigData) return undefined;
-    // Ensure defaults are part of the object used for reset, matching Zod schema defaults
-    return {
-      ...assistantConfigSchema.strip().parse(initialConfigData), // Use Zod to strip unknown and apply defaults before reset
-      // Explicitly ensure voice and transcriber are present for form reset, even if somehow missing from parsed data
-      voice: initialConfigData.voice || DEFAULT_VOICE_CONFIG,
-      transcriber: initialConfigData.transcriber || DEFAULT_TRANSCRIBER_CONFIG,
-    };
+    // Use Zod to parse and apply defaults, ensuring a complete object for the form.
+    // This helps stabilize the initialConfig object reference.
+    try {
+      const parsedConfig = assistantConfigSchema.parse(initialConfigData);
+      return parsedConfig;
+    } catch (e) {
+      console.error("Zod parsing error for initialConfigData:", e);
+      // Fallback to a structure that at least has id and name, plus defaults
+      // This might happen if localStorage data is malformed or outdated.
+      return {
+        id: initialConfigData.id,
+        assistantName: initialConfigData.assistantName,
+        ...DEFAULT_ASSISTANT_CONFIG, // Apply full defaults
+        voice: initialConfigData.voice || DEFAULT_VOICE_CONFIG, // Ensure voice is present
+        transcriber: initialConfigData.transcriber || DEFAULT_TRANSCRIBER_CONFIG, // Ensure transcriber is present
+      };
+    }
   }, [initialConfigData]);
   
   const methods = useForm<AssistantConfig>({
     resolver: zodResolver(assistantConfigSchema),
-    defaultValues: initialConfig || DEFAULT_ASSISTANT_CONFIG, // Provide a fallback if initialConfig is somehow undefined
+    defaultValues: initialConfig || { ...DEFAULT_ASSISTANT_CONFIG, id: assistantId, assistantName: "Loading..." },
     mode: "onBlur", 
   });
 
@@ -158,15 +165,12 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
   useEffect(() => {
     if (initialConfig) {
       isResetting.current = true;
-      methods.reset(initialConfig);
-      // Use a microtask to reset the flag after the current synchronous execution block
-      queueMicrotask(() => {
+      methods.reset(initialConfig); 
+      queueMicrotask(() => { // Changed from setTimeout(0) to queueMicrotask
         isResetting.current = false;
       });
     }
-    // This effect should primarily react to changes in `initialConfig` (which means the assistant ID or its stored data changed)
-    // or `methods` (which is stable).
-  }, [initialConfig, methods, assistantId]); // Added assistantId to re-run if the panel is for a new assistant
+  }, [initialConfig, methods]);
 
 
   useEffect(() => {
@@ -174,21 +178,28 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
       if (isResetting.current) {
         return; 
       }
-      // Only update on blur or specific change events if needed to avoid too many updates
-      if (type === 'change' && name) { // Or use 'blur' if changes are too frequent
-        // @ts-ignore
-        const valueToUpdate = formValue[name as keyof AssistantConfig];
-         if (name.startsWith('systemPromptEnforcement.')) {
-            updateConfig(assistantId, { systemPromptEnforcement: formValue.systemPromptEnforcement });
-        } else if (name.startsWith('voice.')) {
-            updateConfig(assistantId, { voice: formValue.voice });
+      // Auto-save on blur for specific fields, or on change for things like sliders/switches.
+      // The exact logic here might need refinement based on desired UX for auto-saving.
+      // For now, let's assume any "change" could be auto-saved.
+      if (type === 'change' && name && assistantId) { 
+        // We need to be careful here to pass the correct nested structure if name is nested.
+        let updatePayload: Partial<AssistantConfig> = {};
+        
+        if (name.startsWith('voice.')) {
+            updatePayload.voice = formValue.voice;
         } else if (name.startsWith('transcriber.')) {
-            updateConfig(assistantId, { transcriber: formValue.transcriber });
+            updatePayload.transcriber = formValue.transcriber;
+        } else if (name.startsWith('systemPromptEnforcement.')) {
+            updatePayload.systemPromptEnforcement = formValue.systemPromptEnforcement;
         }
          else {
           const fieldNameKey = name as keyof AssistantConfig;
-          // @ts-ignore
-          updateConfig(assistantId, { [fieldNameKey]: valueToUpdate });
+          // @ts-ignore - formValue might not be a perfect Partial<AssistantConfig> here, but RHF handles types.
+          updatePayload[fieldNameKey] = formValue[fieldNameKey];
+        }
+        
+        if (Object.keys(updatePayload).length > 0) {
+             updateConfig(assistantId, updatePayload);
         }
       }
     });
@@ -197,8 +208,7 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
 
 
   const onSubmit = (data: AssistantConfig) => {
-    // Zod resolver already applied defaults, but ensure it's the final shape before saving
-    const validatedData = assistantConfigSchema.parse(data);
+    const validatedData = assistantConfigSchema.parse(data); // Re-validate and ensure defaults
     updateConfig(assistantId, validatedData);
     toast({
       title: "Configuration Saved",
@@ -209,19 +219,20 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
   const handleSave = async () => {
     const isValid = await methods.trigger();
     if (isValid) {
-      methods.handleSubmit(onSubmit)();
+      // RHF's handleSubmit will pass the latest form values, already validated.
+      methods.handleSubmit(onSubmit)(); 
     } else {
       const errors = methods.formState.errors;
       let errorMessage = "Please check the form for errors.";
 
-      // Find the first error to display a more specific message
-      const findFirstErrorMessage = (obj: any): string | null => {
+      const findFirstErrorMessage = (obj: any, path: string = ''): string | null => {
         for (const key in obj) {
+          const currentPath = path ? `${path}.${key}` : key;
           if (obj[key] && typeof obj[key].message === 'string') {
-            return obj[key].message;
+            return `${obj[key].message} (Field: ${currentPath})`;
           }
-          if (obj[key] && typeof obj[key] === 'object') {
-            const nestedMessage = findFirstErrorMessage(obj[key]);
+          if (obj[key] && typeof obj[key] === 'object' && !Array.isArray(obj[key])) { // Avoid iterating array indices
+            const nestedMessage = findFirstErrorMessage(obj[key], currentPath);
             if (nestedMessage) return nestedMessage;
           }
         }
@@ -231,17 +242,21 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
       const specificError = findFirstErrorMessage(errors);
       if (specificError) {
         errorMessage = specificError;
+      } else if (errors.root?.message) {
+        errorMessage = errors.root.message;
       }
+
 
       toast({
         title: "Validation Error",
         description: errorMessage,
         variant: "destructive",
       });
+       console.error("Validation errors:", errors);
     }
   };
 
-  if (!initialConfig) { // This relies on ConfigPanelClientWrapper ensuring config is loaded
+  if (!initialConfig) { 
     return (
       <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed shadow-sm p-8">
         <div className="text-center">

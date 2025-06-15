@@ -10,23 +10,27 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Volume2, Settings, SlidersHorizontal, ListFilter, Palette, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Volume2, Settings, SlidersHorizontal, ListFilter, Palette, Sparkles, AlertCircle, Loader2, Info, UploadCloud, FileText, X } from 'lucide-react';
 import type { AssistantConfig, VoiceConfig } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 import { synthesizeSpeech, type SynthesizeSpeechInput } from '@/ai/flows/synthesize-speech-flow';
 
 // Mock data - replace with actual API calls later
-const VOICE_PROVIDERS = [{ id: 'elevenlabs', name: 'ElevenLabs' }];
-const ELEVENLABS_VOICES = [
-  { id: 'bella', name: 'Bella (F, American)' },
-  { id: 'adam', name: 'Adam (M, American)' },
-  { id: 'antoni', name: 'Antoni (M, American, Polish accent)' },
+const VOICE_PROVIDERS = [{ id: 'elevenlabs', name: 'ElevenLabs' }]; // Add more if supported
+const ELEVENLABS_VOICES = [ // This would be dynamically loaded in a real app
+  { id: 'bella', name: 'Bella (F, American, Standard)' },
+  { id: 'adam', name: 'Adam (M, American, Deep)' },
+  { id: 'antoni', name: 'Antoni (M, American, Well-rounded)' },
   { id: 'rachel', name: 'Rachel (F, American, Calm)' },
+  // Add more known voices or a placeholder for dynamic loading
 ];
-const LANGUAGES = [
+const LANGUAGES = [ // This would also be dynamic based on provider/voice
   { id: 'en-US', name: 'English (US)' },
+  { id: 'en-GB', name: 'English (UK)' },
   { id: 'es-ES', name: 'Español (España)' },
   { id: 'fr-FR', name: 'Français (France)' },
+  // Add more
 ];
 const BACKGROUND_SOUNDS = [
   { id: 'default', name: 'Default (No Background)' },
@@ -38,15 +42,46 @@ const BACKGROUND_SOUNDS = [
   { id: 'custom', name: 'Custom URL' },
 ];
 
-const SAMPLE_PREVIEW_TEXT = "Hello, this is a sample of my voice. I hope you like the way I sound!";
+const EMOTIONS = [ // Provider-specific, example
+    { id: 'neutral', name: 'Neutral' },
+    { id: 'happy', name: 'Happy' },
+    { id: 'sad', name: 'Sad' },
+    { id: 'angry', name: 'Angry' },
+    { id: 'excited', name: 'Excited' },
+    { id: 'friendly', name: 'Friendly' },
+];
+
+const TONES = [ // Provider-specific, example
+    { id: 'neutral', name: 'Neutral' },
+    { id: 'professional', name: 'Professional' },
+    { id: 'casual', name: 'Casual' },
+    { id: 'authoritative', name: 'Authoritative' },
+    { id: 'creative', name: 'Creative' },
+];
+
+const SAMPLE_PREVIEW_TEXT = "Hello, this is a sample of my voice. I hope you like the way I sound with the current settings!";
 
 export default function VoiceSettingsTab() {
-  const { control, watch, formState: { errors } } = useFormContext<AssistantConfig>();
+  const { control, watch, setValue, formState: { errors } } = useFormContext<AssistantConfig>();
   const { toast } = useToast();
   const [isPreviewing, setIsPreviewing] = useState(false);
+  const [customPunctuationInput, setCustomPunctuationInput] = useState('');
 
-  const voiceConfig = watch('voice') as VoiceConfig; // Ensure voiceConfig is correctly typed
+
+  const voiceConfig = watch('voice') as VoiceConfig;
   const backgroundSoundType = watch('voice.backgroundSound');
+  const customPunctuationList = watch('voice.customPunctuation', []);
+
+  const handleAddCustomPunctuation = () => {
+    if (customPunctuationInput.trim() && !customPunctuationList.includes(customPunctuationInput.trim())) {
+      setValue('voice.customPunctuation', [...customPunctuationList, customPunctuationInput.trim()], { shouldDirty: true });
+      setCustomPunctuationInput('');
+    }
+  };
+
+  const handleRemoveCustomPunctuation = (puncToRemove: string) => {
+    setValue('voice.customPunctuation', customPunctuationList.filter(p => p !== puncToRemove), { shouldDirty: true });
+  };
 
   const handlePreviewVoice = async () => {
     if (!voiceConfig) {
@@ -65,18 +100,20 @@ export default function VoiceSettingsTab() {
         language: voiceConfig.language,
         speakingRate: voiceConfig.speakingRate,
         pitch: voiceConfig.pitch,
+        emotion: voiceConfig.emotion,
+        tone: voiceConfig.tone,
       };
       const result = await synthesizeSpeech(input);
       toast({
         title: "Voice Preview Simulation",
         description: result.synthesizedSpeechDescription,
-        duration: 8000, // Longer duration for reading
+        duration: 10000, // Longer duration for reading detailed description
       });
     } catch (error) {
-      console.error("Error synthesizing speech:", error);
+      console.error("Error simulating speech synthesis:", error);
       toast({
         title: "Preview Error",
-        description: `Could not simulate voice preview. ${error instanceof Error ? error.message : ''}`,
+        description: `Could not simulate voice preview. ${error instanceof Error ? error.message : 'Unknown error.'}`,
         variant: "destructive",
       });
     } finally {
@@ -90,7 +127,7 @@ export default function VoiceSettingsTab() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><Volume2 className="mr-2 h-5 w-5 text-primary" /> Voice Configuration</CardTitle>
-          <CardDescription>Select voice synthesis provider, voice, and language.</CardDescription>
+          <CardDescription>Select voice synthesis provider, voice, language, and preview.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -100,7 +137,7 @@ export default function VoiceSettingsTab() {
                 name="voice.provider"
                 control={control}
                 render={({ field }) => (
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value} disabled>
                     <SelectTrigger id="voice.provider" className="mt-1">
                       <SelectValue placeholder="Select provider" />
                     </SelectTrigger>
@@ -111,6 +148,7 @@ export default function VoiceSettingsTab() {
                 )}
               />
               {errors.voice?.provider && <p className="text-sm text-destructive mt-1">{errors.voice.provider.message}</p>}
+              <p className="text-xs text-muted-foreground mt-1">Dynamic provider/voice loading coming soon.</p>
             </div>
             <div>
               <Label htmlFor="voice.voiceId">Voice</Label>
@@ -149,11 +187,11 @@ export default function VoiceSettingsTab() {
               {errors.voice?.language && <p className="text-sm text-destructive mt-1">{errors.voice.language.message}</p>}
             </div>
           </div>
-          <Button type="button" variant="outline" onClick={handlePreviewVoice} disabled={isPreviewing}>
+          <Button type="button" variant="outline" onClick={handlePreviewVoice} disabled={isPreviewing} className="w-full md:w-auto">
             {isPreviewing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Volume2 className="mr-2 h-4 w-4" />}
-            Preview Voice (Sample Text)
+            Simulate Voice Preview (Sample Text)
           </Button>
-           {isPreviewing && <p className="text-sm text-muted-foreground mt-2">Simulating voice preview...</p>}
+           {isPreviewing && <p className="text-sm text-muted-foreground mt-2">Generating simulated voice description...</p>}
         </CardContent>
       </Card>
 
@@ -161,7 +199,7 @@ export default function VoiceSettingsTab() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><Settings className="mr-2 h-5 w-5 text-primary" /> Additional Configuration</CardTitle>
-          <CardDescription>Customize background audio and speech parameters.</CardDescription>
+          <CardDescription>Customize background audio and core speech parameters.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <h4 className="text-md font-medium">Background Sound Settings</h4>
@@ -224,7 +262,7 @@ export default function VoiceSettingsTab() {
             </div>
           </div>
 
-          <h4 className="text-md font-medium mt-4">Speech Parameters</h4>
+          <h4 className="text-md font-medium mt-4">Core Speech Parameters</h4>
            <div>
               <Label htmlFor="voice.inputMinCharacters">Input Min Characters for Speech</Label>
               <Controller
@@ -278,45 +316,169 @@ export default function VoiceSettingsTab() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Punctuation Boundaries Section (Placeholder) */}
+      
+      {/* Punctuation Boundaries Section */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center"><ListFilter className="mr-2 h-5 w-5 text-primary" /> Punctuation Boundaries</CardTitle>
-          <CardDescription>Configure speech chunking and pauses. (Coming Soon)</CardDescription>
+          <CardTitle className="flex items-center"><ListFilter className="mr-2 h-5 w-5 text-primary" /> Punctuation & Chunking</CardTitle>
+          <CardDescription>Configure speech chunking, pauses, and custom punctuation.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground text-center p-4">Detailed punctuation and smart chunking settings will be available here.</p>
+        <CardContent className="space-y-6">
+            <div>
+                <Label htmlFor="voice.punctuationBoundaries">Default Punctuation Boundaries (comma-separated)</Label>
+                <Controller
+                    name="voice.punctuationBoundaries"
+                    control={control}
+                    render={({ field }) => (
+                        <Input 
+                            id="voice.punctuationBoundaries"
+                            value={Array.isArray(field.value) ? field.value.join(',') : ''}
+                            onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                            className="mt-1"
+                            placeholder="e.g., .,?,!"
+                        />
+                    )}
+                />
+                {errors.voice?.punctuationBoundaries && <p className="text-sm text-destructive mt-1">{typeof errors.voice.punctuationBoundaries.message === 'string' ? errors.voice.punctuationBoundaries.message : 'Invalid input'}</p>}
+            </div>
+
+            <div>
+                <Label htmlFor="voice.customPunctuation">Custom Punctuation (for speech breaks)</Label>
+                <div className="flex items-center gap-2 mt-1">
+                    <Input 
+                        id="customPunctuationInput"
+                        value={customPunctuationInput}
+                        onChange={(e) => setCustomPunctuationInput(e.target.value)}
+                        placeholder="e.g., -- or ..."
+                        className="flex-grow"
+                    />
+                    <Button type="button" onClick={handleAddCustomPunctuation}>Add</Button>
+                </div>
+                {customPunctuationList.length > 0 && (
+                    <div className="mt-2 space-x-2">
+                        {customPunctuationList.map(punc => (
+                            <span key={punc} className="inline-flex items-center px-2 py-1 bg-muted text-muted-foreground rounded-md text-sm">
+                                {punc}
+                                <Button variant="ghost" size="icon" onClick={() => handleRemoveCustomPunctuation(punc)} className="ml-1 h-5 w-5">
+                                    <X className="h-3 w-3" />
+                                </Button>
+                            </span>
+                        ))}
+                    </div>
+                )}
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <Label htmlFor="voice.pauseDurations.comma">Comma Pause (ms)</Label>
+                     <Controller name="voice.pauseDurations.comma" control={control} render={({ field }) => <Input type="number" {...field} value={field.value || ''} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} className="mt-1" />} />
+                </div>
+                <div>
+                    <Label htmlFor="voice.pauseDurations.period">Period Pause (ms)</Label>
+                     <Controller name="voice.pauseDurations.period" control={control} render={({ field }) => <Input type="number" {...field} value={field.value || ''} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} className="mt-1" />} />
+                </div>
+                <div>
+                    <Label htmlFor="voice.pauseDurations.semicolon">Semicolon Pause (ms)</Label>
+                     <Controller name="voice.pauseDurations.semicolon" control={control} render={({ field }) => <Input type="number" {...field} value={field.value || ''} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} className="mt-1" />} />
+                </div>
+            </div>
+             <div className="flex items-center space-x-2 pt-2">
+              <Controller
+                name="voice.smartChunking"
+                control={control}
+                render={({ field }) => <Switch id="voice.smartChunking" checked={field.value} onCheckedChange={field.onChange} />}
+              />
+              <Label htmlFor="voice.smartChunking">Enable Smart Chunking (intelligent sentence/phrase breaking)</Label>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Note: Actual effect of these settings depends on the chosen TTS provider's capabilities.</p>
         </CardContent>
       </Card>
 
-      {/* Advanced Voice Features Section (Placeholder) */}
+      {/* Advanced Voice Features Section */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center"><Palette className="mr-2 h-5 w-5 text-primary" /> Emotion & Tone Settings</CardTitle>
-          <CardDescription>Adjust voice emotion and tone. (Coming Soon)</CardDescription>
+          <CardTitle className="flex items-center"><Palette className="mr-2 h-5 w-5 text-primary" /> Emotion, Tone & Effects</CardTitle>
+          <CardDescription>Adjust voice emotion, tone, and apply real-time processing effects. (Provider-dependent)</CardDescription>
         </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground text-center p-4">Controls for emotion, tone, and emphasis will be available here.</p>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <Label htmlFor="voice.emotion">Emotion</Label>
+              <Controller
+                name="voice.emotion"
+                control={control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <SelectTrigger id="voice.emotion" className="mt-1">
+                      <SelectValue placeholder="Select emotion" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {EMOTIONS.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+            <div>
+              <Label htmlFor="voice.tone">Tone</Label>
+              <Controller
+                name="voice.tone"
+                control={control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <SelectTrigger id="voice.tone" className="mt-1">
+                      <SelectValue placeholder="Select tone" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TONES.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+          </div>
+          <h4 className="text-md font-medium mt-4">Voice Effects & Processing</h4>
+            <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                    <Label htmlFor="voice.voiceEffects.echo">Echo Effect</Label>
+                    <Controller name="voice.voiceEffects.echo" control={control} render={({ field }) => <Switch id="voice.voiceEffects.echo" checked={field.value} onCheckedChange={field.onChange} />} />
+                </div>
+                <div className="flex items-center justify-between">
+                    <Label htmlFor="voice.voiceEffects.reverb">Reverb Effect</Label>
+                    <Controller name="voice.voiceEffects.reverb" control={control} render={({ field }) => <Switch id="voice.voiceEffects.reverb" checked={field.value} onCheckedChange={field.onChange} />} />
+                </div>
+                <div className="flex items-center justify-between">
+                    <Label htmlFor="voice.voiceEffects.clarityEnhancement">Clarity Enhancement</Label>
+                    <Controller name="voice.voiceEffects.clarityEnhancement" control={control} render={({ field }) => <Switch id="voice.voiceEffects.clarityEnhancement" checked={field.value} onCheckedChange={field.onChange} />} />
+                </div>
+                <div className="flex items-center justify-between">
+                    <Label htmlFor="voice.noiseReduction">Background Noise Reduction (for synthesized voice)</Label>
+                    <Controller name="voice.noiseReduction" control={control} render={({ field }) => <Switch id="voice.noiseReduction" checked={field.value} onCheckedChange={field.onChange} />} />
+                </div>
+            </div>
+             <h4 className="text-md font-medium mt-4">Audio Quality Output</h4>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <Label htmlFor="voice.audioQuality.bitrate">Bitrate (kbps)</Label>
+                     <Controller name="voice.audioQuality.bitrate" control={control} render={({ field }) => <Input type="number" {...field} value={field.value || ''} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} className="mt-1" placeholder="e.g., 128" />} />
+                </div>
+                 <div>
+                    <Label htmlFor="voice.audioQuality.sampleRate">Sample Rate (Hz)</Label>
+                     <Controller name="voice.audioQuality.sampleRate" control={control} render={({ field }) => <Input type="number" {...field} value={field.value || ''} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} className="mt-1" placeholder="e.g., 24000" />} />
+                </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Availability of emotion, tone, and effects are highly dependent on the selected TTS provider and voice.</p>
         </CardContent>
       </Card>
       
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center"><Sparkles className="mr-2 h-5 w-5 text-primary" /> Real-time Voice Processing</CardTitle>
-          <CardDescription>Apply voice effects and enhancements. (Coming Soon)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground text-center p-4">Options for voice effects, noise reduction, and audio quality settings will be available here.</p>
-        </CardContent>
-      </Card>
       <div className="p-4 my-4 border border-dashed border-accent/50 rounded-lg bg-accent/10 text-accent-foreground flex items-center">
         <AlertCircle size={20} className="mr-3 text-accent flex-shrink-0" />
         <div>
             <h4 className="font-semibold">Developer Note:</h4>
             <p className="text-sm">
-                Many advanced voice features (e.g., live preview with actual audio, dynamic voice loading, custom punctuation effects, emotion/tone synthesis, real-time processing) require significant backend and API integration.
-                This UI provides the foundational controls. Actual synthesis and advanced effects are not yet implemented beyond simulation.
+                This interface provides controls for a wide range of voice synthesis features.
+                Actual real-time audio preview, dynamic voice/language loading based on provider, and the precise effect of advanced settings (emotion, tone, custom punctuation, effects) require deep integration with specific TTS provider APIs (e.g., ElevenLabs, Google Cloud TTS, AWS Polly).
+                The current "Simulate Voice Preview" uses an AI model to describe the sound. Full implementation of these features is a significant undertaking.
             </p>
         </div>
       </div>

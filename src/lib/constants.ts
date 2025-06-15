@@ -10,22 +10,22 @@ export const OPENAI_MODELS = [
 
 export const DEFAULT_VOICE_CONFIG: VoiceConfig = {
   provider: 'elevenlabs',
-  voiceId: 'bella', // Example default voice ID
+  voiceId: 'bella', 
   language: 'en-US',
   backgroundSound: 'default',
   backgroundSoundUrl: '',
-  backgroundVolume: 0.5, // 50%
+  backgroundVolume: 0.5, 
   loopBackgroundSound: false,
   inputMinCharacters: 20,
   speakingRate: 1.0,
   pitch: 1.0,
-  masterVolume: 1.0, // 100%
+  masterVolume: 1.0, 
   punctuationBoundaries: ['.', '?', '!'],
   customPunctuation: [],
   pauseDurations: { comma: 150, period: 300, semicolon: 250 },
   smartChunking: true,
-  emotion: 'neutral',
-  tone: 'neutral',
+  emotion: 'neutral', // Default emotion
+  tone: 'neutral', // Default tone
   voiceEffects: { echo: false, reverb: false, clarityEnhancement: true },
   noiseReduction: false,
   audioQuality: { bitrate: 128, sampleRate: 24000 },
@@ -33,14 +33,14 @@ export const DEFAULT_VOICE_CONFIG: VoiceConfig = {
 
 export const DEFAULT_TRANSCRIBER_CONFIG: TranscriberConfig = {
   provider: 'deepgram',
-  model: 'nova-2', // Example default model for Deepgram
+  model: 'nova-2', 
   language: 'en-US',
   autoDetectLanguage: false,
   smartFormatting: {
     enabled: true,
     punctuation: true,
     capitalization: true,
-    speakerLabels: false, // Typically off by default or a premium feature
+    speakerLabels: false, 
     fillerWordRemoval: false,
     profanityFilter: false,
   },
@@ -51,8 +51,8 @@ export const DEFAULT_TRANSCRIBER_CONFIG: TranscriberConfig = {
     echoCancellation: false,
   },
   qualityControl: {
-    confidenceThreshold: 0.85, // 85%
-    minWordLength: 0, // No minimum by default
+    confidenceThreshold: 0.85, 
+    minWordLength: 0, 
     customVocabulary: [],
     filterLowConfidence: false,
   },
@@ -94,33 +94,46 @@ export const INITIAL_ASSISTANT_CONFIGS: Record<string, AssistantConfig> = {
   'elliot-1': {
     id: 'elliot-1',
     assistantName: 'Elliot - Customer Support',
-    ...DEFAULT_ASSISTANT_CONFIG,
+    provider: 'openai',
+    model: OPENAI_MODELS[0].id,
+    firstMessage: 'Hello! How can I assist Elliot today?',
     systemPrompt: 'You are Elliot, a friendly and efficient customer support AI. Your goal is to resolve customer issues quickly and accurately.',
+    maxTokens: 2048,
+    temperature: 0.7,
+    files: [],
+    systemPromptEnforcement: { enabled: false },
     voice: {
       ...DEFAULT_VOICE_CONFIG,
-      voiceId: 'adam', // Elliot gets a different default voice
+      voiceId: 'adam', 
+      emotion: 'friendly',
+      tone: 'professional',
     },
     transcriber: {
         ...DEFAULT_TRANSCRIBER_CONFIG,
-        // Elliot might need higher accuracy
         model: 'nova-2-general', 
     }
   },
   'sarah-1': {
     id: 'sarah-1',
     assistantName: 'Sarah - Marketing Copywriter',
-    ...DEFAULT_ASSISTANT_CONFIG,
+    provider: 'openai',
     model: 'gpt-4',
+    firstMessage: 'Hi there! Ready to create some amazing marketing copy?',
     systemPrompt: 'You are Sarah, a creative marketing copywriter. Your specialty is crafting compelling and engaging content for various platforms.',
+    maxTokens: 3000,
     temperature: 0.8,
+    files: [],
+    systemPromptEnforcement: { enabled: false },
     voice: {
       ...DEFAULT_VOICE_CONFIG,
-      speakingRate: 1.1, // Sarah speaks a bit faster
-      pitch: 1.05, // Slightly higher pitch
+      voiceId: 'rachel',
+      speakingRate: 1.1, 
+      pitch: 1.05, 
+      emotion: 'excited',
+      tone: 'creative',
     },
     transcriber: {
         ...DEFAULT_TRANSCRIBER_CONFIG,
-        // Sarah might benefit from speaker labels if she dictates interviews
         smartFormatting: {
             ...DEFAULT_TRANSCRIBER_CONFIG.smartFormatting,
             speakerLabels: true,
