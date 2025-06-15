@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ModelConfigTab from './model-config-tab';
 import AdvancedSettingsTab from './advanced-settings-tab';
@@ -36,7 +36,7 @@ const assistantConfigSchema = z.object({
       name: z.string(),
       type: z.string(),
       size: z.number().max(MAX_FILE_SIZE_BYTES, `File size cannot exceed ${MAX_FILE_SIZE_MB}MB`),
-      dataUri: z.string().optional(), 
+      dataUri: z.string().optional(),
     })
   ).max(MAX_FILES, `Cannot upload more than ${MAX_FILES} files`).optional(),
   systemPromptEnforcement: z.object({
@@ -95,9 +95,8 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
 
   const assistant = getAssistantById(assistantId);
   const initialConfigData = getConfig(assistantId) || (assistant ? loadConfig(assistantId, assistant.name) : undefined);
-  
-  // Ensure voice config has defaults if not present
-  const initialConfig = initialConfigData 
+
+  const initialConfig = initialConfigData
     ? {
         ...initialConfigData,
         voice: initialConfigData.voice || DEFAULT_VOICE_CONFIG,
@@ -107,52 +106,60 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
   const methods = useForm<AssistantConfig>({
     resolver: zodResolver(assistantConfigSchema),
     defaultValues: initialConfig,
-    mode: "onBlur", 
+    mode: "onBlur",
   });
-  
+
+  const isResetting = useRef(false);
+
   useEffect(() => {
     if (initialConfig) {
+      isResetting.current = true;
       methods.reset(initialConfig);
-    } else if (assistant && !initialConfigData) { // check initialConfigData here
+      const timerId = setTimeout(() => { isResetting.current = false; }, 0);
+      return () => clearTimeout(timerId);
+    } else if (assistant && !initialConfigData) {
       const newConfData = loadConfig(assistantId, assistant.name);
       const newConf = {
         ...newConfData,
         voice: newConfData.voice || DEFAULT_VOICE_CONFIG,
       }
+      isResetting.current = true;
       methods.reset(newConf);
+      const timerId = setTimeout(() => { isResetting.current = false; }, 0);
+      return () => clearTimeout(timerId);
     }
   }, [assistantId, initialConfig, initialConfigData, methods, assistant, loadConfig]);
-  
+
   useEffect(() => {
-    const subscription = methods.watch((value, { name, type }) => {
-      if (type === 'change' && name && initialConfig) {
-        const fieldName = name as keyof AssistantConfig;
-        // @ts-ignore
-        if (value[fieldName] !== initialConfig[fieldName]) {
-          if (name.startsWith('systemPromptEnforcement.')) {
-            updateConfig(assistantId, { systemPromptEnforcement: value.systemPromptEnforcement });
-          } else if (name.startsWith('voice.')) {
-            updateConfig(assistantId, { voice: value.voice });
-          }
-          else {
-             // @ts-ignore
-            updateConfig(assistantId, { [name]: value[fieldName] });
-          }
+    const subscription = methods.watch((formValue, { name, type }) => {
+      if (isResetting.current) {
+        return; 
+      }
+
+      if (type === 'change' && name) {
+        if (name.startsWith('systemPromptEnforcement.')) {
+          updateConfig(assistantId, { systemPromptEnforcement: formValue.systemPromptEnforcement });
+        } else if (name.startsWith('voice.')) {
+          updateConfig(assistantId, { voice: formValue.voice });
+        } else {
+          const fieldNameKey = name as keyof AssistantConfig;
+          // @ts-ignore
+          updateConfig(assistantId, { [fieldNameKey]: formValue[fieldNameKey] });
         }
       }
     });
     return () => subscription.unsubscribe();
-  }, [methods, updateConfig, assistantId, initialConfig]);
+  }, [methods, updateConfig, assistantId]);
 
 
   const onSubmit = (data: AssistantConfig) => {
-    updateConfig(assistantId, data); 
+    updateConfig(assistantId, data);
     toast({
       title: "Configuration Saved",
       description: `Settings for "${data.assistantName}" have been successfully saved.`,
     });
   };
-  
+
   const handleSave = async () => {
     const isValid = await methods.trigger();
     if (isValid) {
@@ -174,7 +181,7 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
             errorMessage = `Voice setting error: ${firstError[voiceErrorKey].message}`;
            }
         }
-        
+
         toast({
           title: "Validation Error",
           description: errorMessage,
@@ -240,7 +247,7 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
             <TabsContent value="analysis" className="mt-0"><div className="p-4 text-center text-muted-foreground">Analysis settings coming soon.</div></TabsContent>
           </div>
         </Tabs>
-        
+
         <div className="mt-auto p-4 border-t bg-background sticky bottom-0">
           <Button type="button" onClick={handleSave} size="lg" className="w-full md:w-auto">
             <Save className="mr-2 h-5 w-5" />
