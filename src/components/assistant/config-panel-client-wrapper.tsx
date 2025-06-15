@@ -17,43 +17,39 @@ export default function ConfigPanelClientWrapper({ assistantId }: ConfigPanelCli
   const router = useRouter();
   const getAssistantById = useAssistantStore((state) => state.getAssistantById);
   const loadConfig = useConfigStore((state) => state.loadConfig);
-  const getConfig = useConfigStore((state) => state.getConfig); // For dependency array
+  const getConfig = useConfigStore((state) => state.getConfig); 
   
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const assistant = getAssistantById(assistantId);
-  // Get config directly from store to use as a stable dependency if possible
-  const storeConfig = getConfig(assistantId);
 
   useEffect(() => {
     setIsLoading(true);
     setError(null);
 
-    if (assistant) {
-      if (!storeConfig) {
-        // If config doesn't exist for this assistant in the store, load/create it.
-        // loadConfig will update the store, triggering a re-render.
-        // ConfigPanel will then pick up the new config from the store.
-        loadConfig(assistant.id, assistant.name);
+    const currentAssistant = getAssistantById(assistantId);
+
+    if (currentAssistant) {
+      const currentConfigInStore = getConfig(assistantId);
+      if (!currentConfigInStore) {
+        // Config is not in the store, load it (which also creates/updates it in store)
+        loadConfig(currentAssistant.id, currentAssistant.name);
       }
-      // Whether config was present or just loaded, we can stop loading.
-      // ConfigPanel will handle its own internal state based on store's getConfig.
+      // Config is now guaranteed to be in the store or being loaded by the call above
       setIsLoading(false);
     } else {
-      // Assistant not found, could be an invalid ID or data not loaded yet.
-      // Attempt to wait a bit for Zustand hydration.
+      // Assistant not found, could be an invalid ID or data not loaded yet (e.g. after a delete/redirect).
+      // Attempt to wait a bit for Zustand hydration or navigation to complete.
       const timer = setTimeout(() => {
-        const stillNoAssistant = !getAssistantById(assistantId);
+        const stillNoAssistant = !getAssistantById(assistantId); // Re-check
         if (stillNoAssistant) {
           setError(`Assistant with ID "${assistantId}" not found.`);
         }
         setIsLoading(false);
-      }, 500);
+      }, 500); // Increased timeout slightly for robustness
       return () => clearTimeout(timer);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assistantId, assistant, storeConfig, loadConfig, getAssistantById]);
+  }, [assistantId, getAssistantById, loadConfig, getConfig]);
 
 
   if (isLoading) {
@@ -78,13 +74,16 @@ export default function ConfigPanelClientWrapper({ assistantId }: ConfigPanelCli
     );
   }
   
-  // At this point, assistant should be available if no error.
-  // ConfigPanel will fetch its own config from the store.
-  if (!assistant) {
+  // At this point, an assistant record should exist if no error,
+  // and its config should be in the store (or was just loaded).
+  // ConfigPanel will fetch its own config from the store using getConfig.
+  const assistant = getAssistantById(assistantId); // Re-fetch for conditional rendering
+   if (!assistant) { // This check is important if initial load had an issue but didn't set error yet
      return (
       <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-destructive shadow-sm p-8 h-full">
         <AlertTriangle className="h-12 w-12 text-destructive" />
         <h3 className="mt-4 text-lg font-semibold text-destructive">Failed to load assistant data.</h3>
+        <p className="mt-2 text-sm text-muted-foreground">The assistant might have been deleted or an error occurred.</p>
         <Button onClick={() => router.push('/')} className="mt-4">Go to Dashboard</Button>
       </div>
     );

@@ -24,17 +24,38 @@ export const useConfigStore = create<ConfigState>()(
       error: null,
 
       loadConfig: (assistantId, assistantName) => {
-        const existingConfig = get().configs[assistantId];
-        if (existingConfig) {
+        let config = get().configs[assistantId];
+        let needsUpdateInStore = false;
+
+        if (config) {
           // Ensure existing configs have default voice and transcriber if they are missing
-          return {
-            ...existingConfig,
-            voice: existingConfig.voice || DEFAULT_VOICE_CONFIG,
-            transcriber: existingConfig.transcriber || DEFAULT_TRANSCRIBER_CONFIG,
-          };
+          const MappedVoiceConfig = config.voice || DEFAULT_VOICE_CONFIG;
+          const MappedTranscriberConfig = config.transcriber || DEFAULT_TRANSCRIBER_CONFIG;
+
+          if (config.voice !== MappedVoiceConfig || config.transcriber !== MappedTranscriberConfig) {
+            config = { 
+              ...config, 
+              voice: MappedVoiceConfig, 
+              transcriber: MappedTranscriberConfig 
+            };
+            needsUpdateInStore = true;
+          }
+        } else {
+          // If no config exists, create a new one (createConfig saves to store)
+          config = get().createConfig(assistantId, assistantName);
+          // No need for needsUpdateInStore = true here as createConfig handles it.
         }
-        // If no config exists, create a new one
-        return get().createConfig(assistantId, assistantName);
+        
+        if (needsUpdateInStore && config) {
+          const newConfigToStore = config; // Capture current value for closure
+          set(state => ({
+            configs: {
+              ...state.configs,
+              [assistantId]: newConfigToStore,
+            }
+          }));
+        }
+        return config!; // Config is guaranteed to be defined here
       },
       
       updateConfig: (assistantId, updates) => {
@@ -65,15 +86,9 @@ export const useConfigStore = create<ConfigState>()(
       },
 
       getConfig: (assistantId: string) => {
-        const config = get().configs[assistantId];
-        if (config) {
-          return {
-            ...config,
-            voice: config.voice || DEFAULT_VOICE_CONFIG,
-            transcriber: config.transcriber || DEFAULT_TRANSCRIBER_CONFIG,
-          };
-        }
-        return undefined;
+        // Now that loadConfig and createConfig ensure defaults are in the store,
+        // getConfig can simply return the stored object.
+        return get().configs[assistantId];
       },
 
       deleteConfig: (assistantId: string) => {
@@ -102,10 +117,7 @@ export const useConfigStore = create<ConfigState>()(
     {
       name: 'assistly-config-storage',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ configs: state.configs }), // Only persist configs
-      // Custom migration/versioning could be added here if schema changes significantly
-      // version: 1, // example
-      // migrate: (persistedState, version) => { ... }
+      partialize: (state) => ({ configs: state.configs }), 
     }
   )
 );

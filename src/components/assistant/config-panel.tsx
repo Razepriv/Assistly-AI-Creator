@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ModelConfigTab from './model-config-tab';
 import AdvancedSettingsTab from './advanced-settings-tab';
 import VoiceSettingsTab from './voice-settings-tab';
-import TranscriberSettingsTab from './transcriber-settings-tab'; // Import new tab
+import TranscriberSettingsTab from './transcriber-settings-tab';
 import { useForm, FormProvider } from 'react-hook-form';
 import type { AssistantConfig } from '@/types';
 import { useConfigStore } from '@/store/config-store';
@@ -27,7 +27,7 @@ const voiceConfigSchema = z.object({
   voiceId: z.string().min(1, "Voice selection is required"),
   language: z.string().min(1, "Language is required"),
   backgroundSound: z.enum(['default', 'office', 'cafe', 'nature', 'white_noise_brown', 'white_noise_pink', 'custom']),
-  backgroundSoundUrl: z.string().url("Must be a valid URL if provided").optional().or(z.literal('')),
+  backgroundSoundUrl: z.string().url("Must be a valid URL if custom sound is selected and URL is provided").optional().or(z.literal('')),
   backgroundVolume: z.number().min(0).max(1),
   loopBackgroundSound: z.boolean(),
   inputMinCharacters: z.number().min(0).int("Must be an integer"),
@@ -54,7 +54,15 @@ const voiceConfigSchema = z.object({
       bitrate: z.number().optional(),
       sampleRate: z.number().optional(),
   }).optional(),
-}).default(DEFAULT_VOICE_CONFIG);
+}).default(DEFAULT_VOICE_CONFIG).refine(data => {
+    if (data.backgroundSound === 'custom' && (!data.backgroundSoundUrl || data.backgroundSoundUrl.trim() === '')) {
+      return false; // Invalid: custom sound selected but no URL
+    }
+    return true;
+  }, {
+    message: "Custom background sound URL is required when 'Custom URL' is selected.",
+    path: ["backgroundSoundUrl"], // Path to the field to attach the error message
+});
 
 const transcriberConfigSchema = z.object({
   provider: z.enum(['deepgram', 'openai', 'assemblyai']).default('deepgram'),
@@ -98,15 +106,15 @@ const assistantConfigSchema = z.object({
       name: z.string(),
       type: z.string(),
       size: z.number().max(MAX_FILE_SIZE_BYTES, `File size cannot exceed ${MAX_FILE_SIZE_MB}MB`),
-      dataUri: z.string().optional(),
+      dataUri: z.string().optional(), // dataUri is optional as it's read client-side
     })
-  ).max(MAX_FILES, `Cannot upload more than ${MAX_FILES} files`).optional(),
+  ).max(MAX_FILES, `Cannot upload more than ${MAX_FILES} files`).optional().default([]),
   systemPromptEnforcement: z.object({
     enabled: z.boolean(),
     level: z.string().optional(),
   }).optional(),
-  voice: voiceConfigSchema.optional(),
-  transcriber: transcriberConfigSchema.optional(),
+  voice: voiceConfigSchema.optional().default(DEFAULT_VOICE_CONFIG),
+  transcriber: transcriberConfigSchema.optional().default(DEFAULT_TRANSCRIBER_CONFIG),
   toolsIntegrations: z.record(z.any()).optional(),
   analysisSettings: z.record(z.any()).optional(),
 });
@@ -119,26 +127,30 @@ interface ConfigPanelProps {
 export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
   const { toast } = useToast();
   const getConfig = useConfigStore((state) => state.getConfig);
-  const loadConfig = useConfigStore((state) => state.loadConfig);
+  // loadConfig is primarily used by ConfigPanelClientWrapper to ensure config exists in store.
+  // Here, we mostly rely on getConfig to get the data.
   const updateConfig = useConfigStore((state) => state.updateConfig);
-  const getAssistantById = useAssistantStore((state) => state.getAssistantById);
+  
+  // Get the raw config data from the store. This will be stable if the store's getConfig is stable.
+  const initialConfigData = getConfig(assistantId);
 
-  const assistant = getAssistantById(assistantId);
-  const initialConfigData = getConfig(assistantId) || (assistant ? loadConfig(assistantId, assistant.name) : undefined);
-
+  // Memoize the config that will be used to reset the form.
+  // This should only change if initialConfigData itself changes meaningfully.
   const initialConfig = useMemo(() => {
     if (!initialConfigData) return undefined;
+    // Ensure defaults are part of the object used for reset, matching Zod schema defaults
     return {
-      ...initialConfigData,
+      ...assistantConfigSchema.strip().parse(initialConfigData), // Use Zod to strip unknown and apply defaults before reset
+      // Explicitly ensure voice and transcriber are present for form reset, even if somehow missing from parsed data
       voice: initialConfigData.voice || DEFAULT_VOICE_CONFIG,
       transcriber: initialConfigData.transcriber || DEFAULT_TRANSCRIBER_CONFIG,
     };
   }, [initialConfigData]);
-
+  
   const methods = useForm<AssistantConfig>({
     resolver: zodResolver(assistantConfigSchema),
-    defaultValues: initialConfig,
-    mode: "onBlur",
+    defaultValues: initialConfig || DEFAULT_ASSISTANT_CONFIG, // Provide a fallback if initialConfig is somehow undefined
+    mode: "onBlur", 
   });
 
   const isResetting = useRef(false);
@@ -147,21 +159,14 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
     if (initialConfig) {
       isResetting.current = true;
       methods.reset(initialConfig);
-      const timerId = setTimeout(() => { isResetting.current = false; }, 0);
-      return () => clearTimeout(timerId);
-    } else if (assistant && !initialConfigData) {
-      const newConfData = loadConfig(assistantId, assistant.name);
-      const newConfWithDefaults = { 
-        ...newConfData,
-        voice: newConfData.voice || DEFAULT_VOICE_CONFIG,
-        transcriber: newConfData.transcriber || DEFAULT_TRANSCRIBER_CONFIG,
-      };
-      isResetting.current = true;
-      methods.reset(newConfWithDefaults);
-      const timerId = setTimeout(() => { isResetting.current = false; }, 0);
-      return () => clearTimeout(timerId);
+      // Use a microtask to reset the flag after the current synchronous execution block
+      queueMicrotask(() => {
+        isResetting.current = false;
+      });
     }
-  }, [assistantId, initialConfig, initialConfigData, methods, assistant, loadConfig]);
+    // This effect should primarily react to changes in `initialConfig` (which means the assistant ID or its stored data changed)
+    // or `methods` (which is stable).
+  }, [initialConfig, methods, assistantId]); // Added assistantId to re-run if the panel is for a new assistant
 
 
   useEffect(() => {
@@ -169,8 +174,8 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
       if (isResetting.current) {
         return; 
       }
-
-      if (type === 'change' && name) {
+      // Only update on blur or specific change events if needed to avoid too many updates
+      if (type === 'change' && name) { // Or use 'blur' if changes are too frequent
         // @ts-ignore
         const valueToUpdate = formValue[name as keyof AssistantConfig];
          if (name.startsWith('systemPromptEnforcement.')) {
@@ -192,16 +197,12 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
 
 
   const onSubmit = (data: AssistantConfig) => {
-    // Ensure defaults are applied if optional fields are missing before saving
-    const dataToSave = {
-      ...data,
-      voice: data.voice || DEFAULT_VOICE_CONFIG,
-      transcriber: data.transcriber || DEFAULT_TRANSCRIBER_CONFIG,
-    };
-    updateConfig(assistantId, dataToSave);
+    // Zod resolver already applied defaults, but ensure it's the final shape before saving
+    const validatedData = assistantConfigSchema.parse(data);
+    updateConfig(assistantId, validatedData);
     toast({
       title: "Configuration Saved",
-      description: `Settings for "${data.assistantName}" have been successfully saved.`,
+      description: `Settings for "${validatedData.assistantName}" have been successfully saved.`,
     });
   };
 
@@ -211,39 +212,25 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
       methods.handleSubmit(onSubmit)();
     } else {
       const errors = methods.formState.errors;
-      const firstErrorKey = Object.keys(errors)[0] as keyof AssistantConfig | undefined;
-      
       let errorMessage = "Please check the form for errors.";
 
-      if (firstErrorKey) {
-        const errorField = errors[firstErrorKey];
-        if (errorField && 'message' in errorField && typeof errorField.message === 'string') {
-          errorMessage = errorField.message;
-        } else if (firstErrorKey === 'voice' && errorField && typeof errorField === 'object') {
-            const voiceErrorKey = Object.keys(errorField)[0] as keyof AssistantConfig['voice'];
-            // @ts-ignore
-            if (voiceErrorKey && errorField[voiceErrorKey] && errorField[voiceErrorKey].message) {
-                // @ts-ignore
-                errorMessage = `Voice setting error: ${errorField[voiceErrorKey].message}`;
-            }
-        } else if (firstErrorKey === 'transcriber' && errorField && typeof errorField === 'object') {
-            const transcriberErrorKey = Object.keys(errorField)[0] as keyof AssistantConfig['transcriber'];
-            // @ts-ignore
-            if (transcriberErrorKey && errorField[transcriberErrorKey] && errorField[transcriberErrorKey].message) {
-                // @ts-ignore
-                errorMessage = `Transcriber setting error: ${errorField[transcriberErrorKey].message}`;
-            // @ts-ignore
-            } else if (transcriberErrorKey && errorField[transcriberErrorKey] && typeof errorField[transcriberErrorKey] === 'object') {
-                // Handle nested objects within transcriber, e.g., smartFormatting
-                // @ts-ignore
-                const nestedErrorKey = Object.keys(errorField[transcriberErrorKey])[0];
-                // @ts-ignore
-                if (nestedErrorKey && errorField[transcriberErrorKey][nestedErrorKey] && errorField[transcriberErrorKey][nestedErrorKey].message) {
-                    // @ts-ignore
-                    errorMessage = `Transcriber error (${transcriberErrorKey}): ${errorField[transcriberErrorKey][nestedErrorKey].message}`;
-                }
-            }
+      // Find the first error to display a more specific message
+      const findFirstErrorMessage = (obj: any): string | null => {
+        for (const key in obj) {
+          if (obj[key] && typeof obj[key].message === 'string') {
+            return obj[key].message;
+          }
+          if (obj[key] && typeof obj[key] === 'object') {
+            const nestedMessage = findFirstErrorMessage(obj[key]);
+            if (nestedMessage) return nestedMessage;
+          }
         }
+        return null;
+      };
+      
+      const specificError = findFirstErrorMessage(errors);
+      if (specificError) {
+        errorMessage = specificError;
       }
 
       toast({
@@ -254,14 +241,14 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
     }
   };
 
-  if (!initialConfig) {
+  if (!initialConfig) { // This relies on ConfigPanelClientWrapper ensuring config is loaded
     return (
       <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed shadow-sm p-8">
         <div className="text-center">
           <Info className="mx-auto h-12 w-12 text-muted-foreground" />
           <h3 className="mt-4 text-lg font-semibold">Loading Assistant Configuration...</h3>
           <p className="mt-2 text-sm text-muted-foreground">
-            If this persists, the assistant might not exist or there was an issue loading its settings.
+            Please wait or select an assistant.
           </p>
         </div>
       </div>
