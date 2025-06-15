@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useFormContext, Controller } from 'react-hook-form';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState, useFormStatus } from 'react'; // Changed from react-dom
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
@@ -20,7 +20,7 @@ import { synthesizeElevenLabsSpeech, type ElevenLabsSpeechState } from '@/app/ac
 
 
 const VOICE_PROVIDERS = [{ id: 'elevenlabs', name: 'ElevenLabs' }];
-const ELEVENLABS_VOICES = [ 
+const ELEVENLABS_VOICES = [
   { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel (F, American, Calm)' },
   { id: '29vD33N1CtxCmqQRPOHJ', name: 'Drew (M, American, Conversational)' },
   { id: '2EiwWnXFnvU5JabPnv8n', name: 'Clyde (M, American, Deep)' },
@@ -52,7 +52,7 @@ const ELEVENLABS_VOICES = [
   { id: 'zcAOhNBS3c14rBihAFp1', name: 'Joseph (M, British, Neutral)' },
   { id: 'zqn6B32R982AIa32P4zD', name: 'Serena (F, American, Pleasant)' },
 ];
-const LANGUAGES = [ 
+const LANGUAGES = [
   { id: 'en-US', name: 'English (US)' },
   { id: 'en-GB', name: 'English (UK)' },
   { id: 'es-ES', name: 'Español (España)' },
@@ -68,7 +68,7 @@ const BACKGROUND_SOUNDS = [
   { id: 'custom', name: 'Custom URL' },
 ];
 
-const EMOTIONS = [ 
+const EMOTIONS = [
     { id: 'neutral', name: 'Neutral' },
     { id: 'happy', name: 'Happy' },
     { id: 'sad', name: 'Sad' },
@@ -77,7 +77,7 @@ const EMOTIONS = [
     { id: 'friendly', name: 'Friendly' },
 ];
 
-const TONES = [ 
+const TONES = [
     { id: 'neutral', name: 'Neutral' },
     { id: 'professional', name: 'Professional' },
     { id: 'casual', name: 'Casual' },
@@ -111,7 +111,7 @@ export default function VoiceSettingsTab() {
   const customPunctuationList = watch('voice.customPunctuation', []);
 
   const initialElevenLabsState: ElevenLabsSpeechState = { success: false };
-  const [elevenLabsState, formAction] = useFormState(synthesizeElevenLabsSpeech, initialElevenLabsState);
+  const [elevenLabsState, formAction] = useActionState(synthesizeElevenLabsSpeech, initialElevenLabsState);
 
 
   useEffect(() => {
@@ -178,7 +178,7 @@ export default function VoiceSettingsTab() {
       toast({
         title: "Voice Preview Simulation",
         description: result.synthesizedSpeechDescription,
-        duration: 10000, 
+        duration: 10000,
       });
     } catch (error) {
       console.error("Error simulating speech synthesis:", error);
@@ -264,7 +264,7 @@ export default function VoiceSettingsTab() {
               Simulate Voice Preview (Description)
             </Button>
             {isSimulatingPreview && <p className="text-sm text-muted-foreground mt-2 md:mt-0 md:ml-2 self-center">Generating simulated voice description...</p>}
-            
+
             <form action={formAction} className="w-full md:w-auto">
               <input type="hidden" name="text" value={ACTUAL_PREVIEW_TEXT} />
               <input type="hidden" name="voiceId" value={voiceConfig?.voiceId || ''} />
@@ -349,10 +349,10 @@ export default function VoiceSettingsTab() {
                 name="voice.inputMinCharacters"
                 control={control}
                 render={({ field }) => (
-                   <Input id="voice.inputMinCharacters" type="number" {...field} 
+                   <Input id="voice.inputMinCharacters" type="number" {...field}
                     value={field.value || 0}
                     onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)}
-                    className="mt-1 w-32" 
+                    className="mt-1 w-32"
                   />
                 )}
               />
@@ -396,7 +396,7 @@ export default function VoiceSettingsTab() {
           </div>
         </CardContent>
       </Card>
-      
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><ListFilter className="mr-2 h-5 w-5 text-primary" /> Punctuation & Chunking</CardTitle>
@@ -409,7 +409,7 @@ export default function VoiceSettingsTab() {
                     name="voice.punctuationBoundaries"
                     control={control}
                     render={({ field }) => (
-                        <Input 
+                        <Input
                             id="voice.punctuationBoundaries"
                             value={Array.isArray(field.value) ? field.value.join(',') : ''}
                             onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
@@ -424,7 +424,7 @@ export default function VoiceSettingsTab() {
             <div>
                 <Label htmlFor="voice.customPunctuation">Custom Punctuation (for speech breaks)</Label>
                 <div className="flex items-center gap-2 mt-1">
-                    <Input 
+                    <Input
                         id="customPunctuationInput"
                         value={customPunctuationInput}
                         onChange={(e) => setCustomPunctuationInput(e.target.value)}
@@ -446,7 +446,7 @@ export default function VoiceSettingsTab() {
                     </div>
                 )}
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                     <Label htmlFor="voice.pauseDurations.comma">Comma Pause (ms)</Label>
@@ -548,7 +548,7 @@ export default function VoiceSettingsTab() {
             <p className="text-xs text-muted-foreground mt-1">Availability of emotion, tone, and effects are highly dependent on the selected TTS provider and voice.</p>
         </CardContent>
       </Card>
-      
+
       <div className="p-4 my-4 border border-dashed border-accent/50 rounded-lg bg-accent/10 text-accent-foreground flex items-center">
         <AlertCircle size={20} className="mr-3 text-accent flex-shrink-0" />
         <div>
