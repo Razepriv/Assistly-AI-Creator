@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAssistantStore, selectFilteredAssistants } from '@/store/assistant-store';
 import { useConfigStore } from '@/store/config-store';
-import { Bot, Search, ChevronDown, ChevronRight, Trash2, PlusCircle } from 'lucide-react';
+import { Bot, Search, ChevronDown, ChevronRight, Trash2, PlusCircle, Server } from 'lucide-react'; // Added Server icon
 import { CreateAssistantDialog } from '@/components/assistant/create-assistant-dialog';
 import {
   AlertDialog,
@@ -42,19 +42,11 @@ export default function AppSidebar() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Sync activeAssistantId with URL on initial load or direct navigation
     const currentIdFromPath = pathname.split('/assistant/')[1];
-    if (currentIdFromPath && currentIdFromPath !== activeAssistantId) {
+    if (currentIdFromPath && currentIdFromPath !== activeAssistantId && !pathname.startsWith('/server-features-demo')) {
       setActiveAssistantId(currentIdFromPath);
-    } else if (!currentIdFromPath && activeAssistantId) {
-      // If on a page like '/' but an assistant is active, navigate to it
-      // router.push(`/assistant/${activeAssistantId}`);
-    } else if (!currentIdFromPath && !activeAssistantId && assistants.length > 0) {
-      // If no assistant selected and list is not empty, select first one
-      // setActiveAssistantId(assistants[0].id);
-      // router.push(`/assistant/${assistants[0].id}`);
     }
-  }, [pathname, activeAssistantId, setActiveAssistantId, assistants, router]);
+  }, [pathname, activeAssistantId, setActiveAssistantId]);
 
 
   const handleAssistantClick = (id: string) => {
@@ -64,29 +56,29 @@ export default function AppSidebar() {
 
   const handleDeleteConfirm = () => {
     if (assistantToDelete) {
+      const assistantName = assistantToDelete.name;
       deleteAssistant(assistantToDelete.id);
       deleteConfig(assistantToDelete.id);
       toast({
         title: "Assistant Deleted",
-        description: `"${assistantToDelete.name}" has been deleted.`,
+        description: `"${assistantName}" has been deleted.`,
       });
       if (activeAssistantId === assistantToDelete.id) {
-        if (assistants.length > 1) {
-          const newActiveAssistant = assistants.find(a => a.id !== assistantToDelete.id);
-          if (newActiveAssistant) {
-            setActiveAssistantId(newActiveAssistant.id);
-            router.push(`/assistant/${newActiveAssistant.id}`);
-          }
+        // Determine next assistant to activate or redirect to dashboard
+        const remainingAssistants = assistants.filter(a => a.id !== assistantToDelete.id);
+        if (remainingAssistants.length > 0) {
+            const newActive = remainingAssistants[0];
+            setActiveAssistantId(newActive.id);
+            router.push(`/assistant/${newActive.id}`);
         } else {
-          setActiveAssistantId(null);
-          router.push('/');
+            setActiveAssistantId(null);
+            router.push('/'); // Navigate to a general page or dashboard
         }
       }
       setAssistantToDelete(null);
     }
   };
 
-  // Example categories (can be dynamic later)
   const categories = Array.from(new Set(assistants.map(a => a.category).filter(Boolean)));
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>(
     categories.reduce((acc, cat) => ({ ...acc, [cat!]: true }), {})
@@ -119,6 +111,24 @@ export default function AppSidebar() {
       </div>
       <ScrollArea className="flex-1">
         <nav className="grid items-start px-4 text-sm font-medium">
+          {/* Link to Server Features Demo Page */}
+          <Link
+            href="/server-features-demo"
+            onClick={() => {
+              // Optionally clear active assistant, or set a general app state
+              // For now, let's not change activeAssistantId unless explicitly needed
+              // setActiveAssistantId(null); 
+            }}
+            className={`group flex items-center rounded-lg px-3 py-2 mb-2 transition-colors hover:bg-sidebar-accent ${
+              pathname === '/server-features-demo'
+                ? 'bg-sidebar-primary text-sidebar-primary-foreground font-semibold' // Use primary for active demo link
+                : 'text-sidebar-foreground hover:text-sidebar-accent-foreground'
+            }`}
+          >
+            <Server className="mr-2 h-4 w-4 flex-shrink-0" />
+            Server Features
+          </Link>
+
           {categorizedAssistants.map(category => (
             <div key={category.name} className="py-1">
               <Button
@@ -133,7 +143,7 @@ export default function AppSidebar() {
                 <AssistantNavItem
                   key={assistant.id}
                   assistant={assistant}
-                  isActive={activeAssistantId === assistant.id}
+                  isActive={activeAssistantId === assistant.id && pathname.startsWith('/assistant/')}
                   onClick={() => handleAssistantClick(assistant.id)}
                   onDelete={() => setAssistantToDelete(assistant)}
                 />
@@ -147,7 +157,7 @@ export default function AppSidebar() {
                 <AssistantNavItem
                   key={assistant.id}
                   assistant={assistant}
-                  isActive={activeAssistantId === assistant.id}
+                  isActive={activeAssistantId === assistant.id && pathname.startsWith('/assistant/')}
                   onClick={() => handleAssistantClick(assistant.id)}
                   onDelete={() => setAssistantToDelete(assistant)}
                 />
@@ -195,19 +205,26 @@ interface AssistantNavItemProps {
 
 function AssistantNavItem({ assistant, isActive, onClick, onDelete }: AssistantNavItemProps) {
   return (
-    <div className={`group relative flex items-center rounded-lg px-3 py-2 transition-colors hover:bg-sidebar-accent ${isActive ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground hover:text-sidebar-accent-foreground'}`}>
-      <Button variant="link" className={`p-0 h-auto text-inherit ${isActive ? 'font-semibold' : ''}`} onClick={onClick}>
+    <div className={`group relative flex items-center rounded-lg transition-colors hover:bg-sidebar-accent ${isActive ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground hover:text-sidebar-accent-foreground'}`}>
+      {/* Wrapper Link/Button for the main navigation part */}
+      <button
+        onClick={onClick}
+        className={`flex-grow items-center px-3 py-2 text-left ${isActive ? 'font-semibold' : ''}`}
+        style={{ all: 'unset', display: 'flex', alignItems: 'center', cursor: 'pointer', width: 'calc(100% - 2.5rem)' }} // Ensure it takes space for click
+      >
         <Bot className="mr-2 h-4 w-4 flex-shrink-0" />
         <span className="truncate max-w-[150px]">{assistant.name}</span>
-      </Button>
+      </button>
+      
+      {/* Delete Button */}
       <Button
           variant="ghost"
           size="icon"
-          className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 opacity-0 group-hover:opacity-100 focus:opacity-100"
+          className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 opacity-0 group-hover:opacity-100 focus:opacity-100 text-destructive hover:bg-destructive/10"
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           aria-label={`Delete ${assistant.name}`}
         >
-        <Trash2 className="h-4 w-4 text-destructive" />
+        <Trash2 className="h-4 w-4" />
       </Button>
     </div>
   );
