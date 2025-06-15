@@ -1,7 +1,45 @@
 export interface VoiceConfig {
-  service: string; // e.g., 'elevenlabs', 'playht'
-  voiceId: string;
-  // other voice-specific settings
+  provider: string; // e.g., 'elevenlabs', 'google', 'aws'
+  voiceId: string; // Specific voice ID from the provider
+  language: string; // e.g., 'en-US'
+
+  // Background Sound
+  backgroundSound: 'default' | 'office' | 'cafe' | 'nature' | 'white_noise_brown' | 'white_noise_pink' | 'custom';
+  backgroundSoundUrl?: string;
+  backgroundVolume: number; // 0-1 (represents 0-100%)
+  loopBackgroundSound: boolean;
+
+  // Speech Parameters
+  inputMinCharacters: number; // Default to 0 or a small number like 10
+  speakingRate: number; // 0.5 - 2.0
+  pitch: number; // 0.5 - 2.0 (often represents a factor)
+  masterVolume: number; // 0-1 (represents 0-100%)
+
+  // Punctuation Boundaries (Placeholders for now)
+  punctuationBoundaries?: string[];
+  customPunctuation?: string[];
+  pauseDurations?: {
+    comma?: number;
+    period?: number;
+    semicolon?: number;
+  };
+  smartChunking?: boolean;
+
+  // Emotion & Tone (Placeholders for now)
+  emotion?: string;
+  tone?: string;
+
+  // Real-time Voice Processing (Placeholders for now)
+  voiceEffects?: {
+    echo?: boolean;
+    reverb?: boolean;
+    clarityEnhancement?: boolean;
+  };
+  noiseReduction?: boolean;
+  audioQuality?: {
+    bitrate?: number;
+    sampleRate?: number;
+  };
 }
 
 export interface TranscriberConfig {

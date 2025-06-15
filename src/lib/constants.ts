@@ -1,4 +1,4 @@
-import type { Assistant, AssistantConfig } from '@/types';
+import type { Assistant, AssistantConfig, VoiceConfig } from '@/types';
 
 export const OPENAI_MODELS = [
   { id: 'gpt-4o', name: 'GPT-4o' },
@@ -6,6 +6,29 @@ export const OPENAI_MODELS = [
   { id: 'gpt-4', name: 'GPT-4' },
   { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
 ];
+
+export const DEFAULT_VOICE_CONFIG: VoiceConfig = {
+  provider: 'elevenlabs',
+  voiceId: 'bella', // Example default voice ID
+  language: 'en-US',
+  backgroundSound: 'default',
+  backgroundSoundUrl: '',
+  backgroundVolume: 0.5, // 50%
+  loopBackgroundSound: false,
+  inputMinCharacters: 20,
+  speakingRate: 1.0,
+  pitch: 1.0,
+  masterVolume: 1.0, // 100%
+  punctuationBoundaries: ['.', '?', '!'],
+  customPunctuation: [],
+  pauseDurations: { comma: 150, period: 300, semicolon: 250 },
+  smartChunking: true,
+  emotion: 'neutral',
+  tone: 'neutral',
+  voiceEffects: { echo: false, reverb: false, clarityEnhancement: true },
+  noiseReduction: false,
+  audioQuality: { bitrate: 128, sampleRate: 24000 },
+};
 
 export const DEFAULT_ASSISTANT_CONFIG: Omit<AssistantConfig, 'id' | 'assistantName'> = {
   provider: 'openai',
@@ -16,6 +39,7 @@ export const DEFAULT_ASSISTANT_CONFIG: Omit<AssistantConfig, 'id' | 'assistantNa
   temperature: 0.7,
   files: [],
   systemPromptEnforcement: { enabled: false },
+  voice: DEFAULT_VOICE_CONFIG,
 };
 
 export const INITIAL_ASSISTANTS: Assistant[] = [
@@ -43,6 +67,10 @@ export const INITIAL_ASSISTANT_CONFIGS: Record<string, AssistantConfig> = {
     assistantName: 'Elliot - Customer Support',
     ...DEFAULT_ASSISTANT_CONFIG,
     systemPrompt: 'You are Elliot, a friendly and efficient customer support AI. Your goal is to resolve customer issues quickly and accurately.',
+    voice: {
+      ...DEFAULT_VOICE_CONFIG,
+      voiceId: 'adam', // Elliot gets a different default voice
+    }
   },
   'sarah-1': {
     id: 'sarah-1',
@@ -51,5 +79,10 @@ export const INITIAL_ASSISTANT_CONFIGS: Record<string, AssistantConfig> = {
     model: 'gpt-4',
     systemPrompt: 'You are Sarah, a creative marketing copywriter. Your specialty is crafting compelling and engaging content for various platforms.',
     temperature: 0.8,
+    voice: {
+      ...DEFAULT_VOICE_CONFIG,
+      speakingRate: 1.1, // Sarah speaks a bit faster
+      pitch: 1.05, // Slightly higher pitch
+    }
   },
 };
