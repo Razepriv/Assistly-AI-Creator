@@ -131,7 +131,10 @@ export interface TestChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  isThinking?: boolean; // Corrected typo from is চিন্তা?
+  isThinking?: boolean; 
+  isTranscribing?: boolean;
+  isSynthesizing?: boolean;
+  audioDataUri?: string; // To store user's recorded audio if needed for replay
 }
 
 export interface TestAssistantChatInput {
@@ -144,3 +147,9 @@ export interface TestAssistantChatOutput {
   assistantResponse: string;
 }
 
+// Deepgram Server Action State
+export interface DeepgramTranscriptionState {
+  transcribedText?: string | null;
+  error?: string | null;
+  success: boolean;
+}

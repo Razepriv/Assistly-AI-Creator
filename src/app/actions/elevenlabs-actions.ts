@@ -3,12 +3,15 @@
 
 import { z } from 'zod';
 
+// Adjusted schema to match typical ElevenLabs parameters more closely
 const ElevenLabsSpeechSchema = z.object({
   text: z.string().min(1, { message: 'Text for speech synthesis is required.' }),
   voiceId: z.string().min(1, { message: 'Voice ID is required.' }),
-  modelId: z.string().optional(),
+  model_id: z.string().optional(), // model_id, not modelId
   stability: z.number().min(0).max(1).optional(),
-  similarityBoost: z.number().min(0).max(1).optional(),
+  similarity_boost: z.number().min(0).max(1).optional(), // similarity_boost
+  style: z.number().min(0).max(1).optional(), // For style_exaggeration
+  use_speaker_boost: z.boolean().optional(), // For speaker_boost
 });
 
 export interface ElevenLabsSpeechState {
@@ -21,26 +24,32 @@ export async function synthesizeElevenLabsSpeech(
   prevState: ElevenLabsSpeechState,
   formData: FormData
 ): Promise<ElevenLabsSpeechState> {
+
+  const stabilityValue = formData.get('stability');
+  const similarityBoostValue = formData.get('similarityBoost');
+  const styleValue = formData.get('style');
+  const useSpeakerBoostValue = formData.get('use_speaker_boost');
+
   const validatedFields = ElevenLabsSpeechSchema.safeParse({
     text: formData.get('text'),
     voiceId: formData.get('voiceId'),
-    modelId: formData.get('modelId') || undefined, // Ensure undefined if not present
-    stability: formData.get('stability') ? parseFloat(formData.get('stability') as string) : undefined,
-    similarityBoost: formData.get('similarityBoost') ? parseFloat(formData.get('similarityBoost') as string) : undefined,
+    model_id: formData.get('model_id') || undefined,
+    stability: stabilityValue ? parseFloat(stabilityValue as string) : undefined,
+    similarity_boost: similarityBoostValue ? parseFloat(similarityBoostValue as string) : undefined,
+    style: styleValue ? parseFloat(styleValue as string) : undefined,
+    use_speaker_boost: useSpeakerBoostValue === 'true' ? true : (useSpeakerBoostValue === 'false' ? false : undefined),
   });
 
   if (!validatedFields.success) {
-    console.error('ElevenLabs Action Validation Error:', validatedFields.error.flatten());
+    console.error('ElevenLabs Action Validation Error:', validatedFields.error.flatten().fieldErrors);
     return {
-      error: 'Invalid input: ' + (validatedFields.error.flatten().fieldErrors.text?.join(', ') || validatedFields.error.flatten().fieldErrors.voiceId?.join(', ') || 'Unknown validation error'),
+      error: 'Invalid input: ' + JSON.stringify(validatedFields.error.flatten().fieldErrors),
       success: false,
     };
   }
 
-  const { text, voiceId, modelId, stability, similarityBoost } = validatedFields.data;
+  const { text, voiceId, model_id, stability, similarity_boost, style, use_speaker_boost } = validatedFields.data;
   const apiKey = process.env.ELEVENLABS_API_KEY;
-
-  console.log('[ElevenLabs Action] Received voiceId:', voiceId);
 
   if (!apiKey) {
     console.error('ElevenLabs API key is not configured.');
@@ -56,17 +65,17 @@ export async function synthesizeElevenLabsSpeech(
 
   const body: Record<string, any> = {
     text: text,
-    model_id: modelId || "eleven_multilingual_v2", // Default to multilingual_v2 if not provided
+    model_id: model_id || "eleven_multilingual_v2", 
   };
 
-  if (stability !== undefined || similarityBoost !== undefined) {
-    body.voice_settings = {};
-    if (stability !== undefined) {
-      body.voice_settings.stability = stability;
-    }
-    if (similarityBoost !== undefined) {
-      body.voice_settings.similarity_boost = similarityBoost;
-    }
+  const voice_settings: Record<string, any> = {};
+  if (stability !== undefined) voice_settings.stability = stability;
+  if (similarity_boost !== undefined) voice_settings.similarity_boost = similarity_boost;
+  if (style !== undefined) voice_settings.style = style; // style_exaggeration
+  if (use_speaker_boost !== undefined) voice_settings.use_speaker_boost = use_speaker_boost;
+  
+  if (Object.keys(voice_settings).length > 0) {
+    body.voice_settings = voice_settings;
   }
   
   console.log('[ElevenLabs Action] Calling API:', elevenLabsApiUrl);
@@ -89,12 +98,15 @@ export async function synthesizeElevenLabsSpeech(
         const errorBodyJson = JSON.parse(errorResponseText);
         if (errorBodyJson.detail && typeof errorBodyJson.detail.message === 'string') {
             errorDetailMessage = errorBodyJson.detail.message;
+        } else if (errorBodyJson.detail && Array.isArray(errorBodyJson.detail) && errorBodyJson.detail.length > 0 && typeof errorBodyJson.detail[0].msg === 'string') {
+            errorDetailMessage = errorBodyJson.detail[0].msg; // Handle cases where error is in an array
         } else if (errorBodyJson.detail && typeof errorBodyJson.detail === 'string') {
             errorDetailMessage = errorBodyJson.detail;
         } else {
             errorDetailMessage = JSON.stringify(errorBodyJson);
         }
       } catch (e) {
+        // If parsing fails, use the raw text, truncated if too long
         errorDetailMessage = errorResponseText.substring(0, 500); 
       }
       
