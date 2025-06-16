@@ -51,6 +51,7 @@ const ELEVENLABS_VOICES = [
   { id: 'z9fAnxQcWzI9SwUxBBKk', name: 'Glinda (F, American, Soft)' },
   { id: 'zcAOhNBS3c14rBihAFp1', name: 'Joseph (M, British, Neutral)' },
   { id: 'zqn6B32R982AIa32P4zD', name: 'Serena (F, American, Pleasant)' },
+  { id: 'pzxut4zZz4GImZNlqQ3H', name: 'Raju' },
 ];
 const LANGUAGES = [
   { id: 'en-US', name: 'English (US)' },

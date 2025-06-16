@@ -8,6 +8,42 @@ export const OPENAI_MODELS = [
   { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
 ];
 
+export const ELEVENLABS_VOICES = [
+  { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel (F, American, Calm)' },
+  { id: '29vD33N1CtxCmqQRPOHJ', name: 'Drew (M, American, Conversational)' },
+  { id: '2EiwWnXFnvU5JabPnv8n', name: 'Clyde (M, American, Deep)' },
+  { id: '5Q0t7uMcjvnagumLfvZi', name: 'Paul (M, American, Authoritative)' },
+  { id: '6JsmTroalVewG1gA6Jmw', name: 'Sia - Friendly Conversational Voice' },
+  { id: 'AZnzlk1XvdvUeBnXmlld', name: 'Domi (F, American, Strong)' },
+  { id: 'CYw3kZ02Hs0563khs1Fj', name: 'Dave (M, British, Conversational)' },
+  { id: 'D38z5RcWu1voky8WS1ja', name: 'Fin (M, British, Deep)' },
+  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah (F, American, Sweet)' },
+  { id: 'ErXwobaYiN019P7OCKZ9', name: 'Antoni (M, American, Well-rounded)' },
+  { id: 'GBv7mTt0atIp3Br8iCZE', name: 'Thomas (M, American, Calm)' },
+  { id: 'MF3mGyEYCl7XYWbV9V6O', name: 'Charlie (M, Australian, Casual)' },
+  { id: 'SOYHLrjzK2X1ezoPC6cr', name: 'George (M, British, Raspy)' },
+  { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Matthew (M, British, Full-bodied)' },
+  { id: 'ThT5KcBeYPX3keUQqHPh', name: 'Dorothy (F, British, Pleasant)' },
+  { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Bella (F, American, Soft)' },
+  { id: 'VR6AewLTigWG4xSOukaG', name: 'Arnold (M, American, Crisp)' },
+  { id: 'VOYVp58_m8j7l6n9042i', name: 'Freya (F, American, Overhyped)'},
+  { id: 'Yko7PKHZNXotIFUBG7I9', name: 'Grace (F, American, Soft)' },
+  { id: 'ZQe5CZNOzWTMGPFeQj2S', name: 'Daniel (M, British, Deep)' },
+  { id: 'XrExE9yKIg1WjnnlVkGX', name: 'James (M, British, Old)' },
+  { id: 'bVMeCyTHy58xNoL34h3p', name: 'Gigi (F, American, Childlish)' },
+  { id: 'g5CIjZEefAph4nQFvHAz', name: 'Liam (M, American, Neutral)' },
+  { id: 'jBpfuIE2acCO8z3wKNLl', name: 'Nicole (F, American, Whispering)' },
+  { id: 'jsCqWAovK2LkecY7zX02', name: 'Bill (M, American, Strong)' },
+  { id: 'piTKgcLEGmPE4e6mEKli', name: 'Adam (M, American, Deep)' },
+  { id: 'pqHkRDMhZ9xky8V6UeVD', name: 'Alice (F, British, Sweet)' },
+  { id: 't0jbNlBVZ17f02VDIeMI', name: 'Jeremy (M, American, Raspy)' },
+  { id: 'z9fAnxQcWzI9SwUxBBKk', name: 'Glinda (F, American, Soft)' },
+  { id: 'zcAOhNBS3c14rBihAFp1', name: 'Joseph (M, British, Neutral)' },
+  { id: 'zqn6B32R982AIa32P4zD', name: 'Serena (F, American, Pleasant)' },
+  { id: 'pzxut4zZz4GImZNlqQ3H', name: 'Raju' },
+];
+
+
 export const DEFAULT_VOICE_CONFIG: VoiceConfig = {
   provider: 'elevenlabs',
   voiceId: '21m00Tcm4TlvDq8ikWAM', // Rachel's ID
