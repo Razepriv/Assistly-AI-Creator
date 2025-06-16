@@ -24,6 +24,15 @@ export async function synthesizeElevenLabsSpeech(
   prevState: ElevenLabsSpeechState,
   formData: FormData
 ): Promise<ElevenLabsSpeechState> {
+  console.log('[ElevenLabs Action] Server action started. Checking API Key...');
+  const apiKeyFromEnv = process.env.ELEVENLABS_API_KEY;
+  if (apiKeyFromEnv) {
+    console.log(`[ElevenLabs Action] ELEVENLABS_API_KEY found (length: ${apiKeyFromEnv.length}).`);
+  } else {
+    console.error('[ElevenLabs Action] ELEVENLABS_API_KEY is NOT FOUND in process.env. Please check your .env file and restart the server.');
+    return { error: 'ElevenLabs API key is not configured on the server. Critical: API key missing from environment.', success: false };
+  }
+  
   console.log('[ElevenLabs Action] Received FormData keys:', Array.from(formData.keys()));
 
   const text = formData.get('text') as string;
@@ -73,20 +82,17 @@ export async function synthesizeElevenLabsSpeech(
     use_speaker_boost 
   } = validatedFields.data;
   
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-
-  if (!apiKey) {
-    console.error('[ElevenLabs Action] ElevenLabs API key is not configured on the server. Ensure ELEVENLABS_API_KEY is set in your .env file.');
-    return { error: 'ElevenLabs API key is not configured on the server. Administrator: Please set ELEVENLABS_API_KEY in the .env file.', success: false };
-  } else {
-    console.log('[ElevenLabs Action] ElevenLabs API key found.');
+  // This is now the primary API key check, the one above is for immediate env feedback
+  if (!apiKeyFromEnv) { // Should have already returned if missing, but as a safeguard.
+    console.error('[ElevenLabs Action] Double check: API key was not available.'); // Should not happen if first check worked
+    return { error: 'ElevenLabs API key is not configured (safeguard check).', success: false };
   }
 
   const elevenLabsApiUrl = `https://api.elevenlabs.io/v1/text-to-speech/${validatedVoiceId}`;
   const headers = {
     'Accept': 'audio/mpeg',
     'Content-Type': 'application/json',
-    'XI-API-KEY': apiKey,
+    'XI-API-KEY': apiKeyFromEnv,
   };
 
   const body: Record<string, any> = {
@@ -105,7 +111,7 @@ export async function synthesizeElevenLabsSpeech(
   }
   
   console.log('[ElevenLabs Action] Calling API URL:', elevenLabsApiUrl);
-  console.log('[ElevenLabs Action] Request Headers:', JSON.stringify(headers, (key, value) => key === 'XI-API-KEY' ? 'REDACTED' : value)); // Redact API key from logs
+  console.log('[ElevenLabs Action] Request Headers:', JSON.stringify(headers, (key, value) => key === 'XI-API-KEY' ? 'REDACTED' : value));
   console.log('[ElevenLabs Action] Request body:', JSON.stringify(body));
 
   try {
@@ -134,6 +140,7 @@ export async function synthesizeElevenLabsSpeech(
             errorDetailMessage = JSON.stringify(errorBodyJson);
         }
       } catch (e) {
+        // If parsing errorBodyJson fails, use the raw text, truncated
         errorDetailMessage = errorResponseText.substring(0, 500); 
       }
       
@@ -150,12 +157,11 @@ export async function synthesizeElevenLabsSpeech(
     return { audioBase64: audioBase64, success: true };
 
   } catch (error) {
-    console.error('[ElevenLabs Action] General error during speech synthesis:', error);
+    console.error('[ElevenLabs Action] General error during speech synthesis (e.g., network issue, DNS):', error);
     let errorMessage = 'Failed to connect to ElevenLabs API or process its response. ';
     if (error instanceof Error) {
         errorMessage += error.message;
-         // Check for specific fetch errors if possible, though Node's fetch might not provide codes like browser's fetch
-        if (error.cause) { // Node.js fetch errors often have a 'cause' property
+        if (error.cause) { 
             errorMessage += ` Cause: ${JSON.stringify(error.cause)}`;
         }
     } else {
@@ -164,5 +170,3 @@ export async function synthesizeElevenLabsSpeech(
     return { error: errorMessage, success: false };
   }
 }
-
-    
