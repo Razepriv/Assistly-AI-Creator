@@ -125,3 +125,21 @@ export interface ChatSession {
   startTime: string;
   messages: ChatMessage[];
 }
+
+// Test Assistant Chat Types
+export interface TestChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  is চিন্তা?: boolean; // Optional: to mark thinking state for AI
+}
+
+export interface TestAssistantChatInput {
+  userInput: string;
+  assistantConfig: AssistantConfig; // Pass the whole config for simplicity
+  chatHistory: TestChatMessage[];
+}
+
+export interface TestAssistantChatOutput {
+  assistantResponse: string;
+}
