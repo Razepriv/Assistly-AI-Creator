@@ -109,3 +109,19 @@ export interface AssistantConfig {
   };
   // For latency display, this would likely be dynamic data, not stored config
 }
+
+// Chat History Types
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
+
+export interface ChatSession {
+  id: string; // Unique ID for the chat session
+  assistantId: string; // ID of the assistant this chat is with
+  userId: string; // ID of the user (for demo purposes, could be a mock ID)
+  startTime: string;
+  messages: ChatMessage[];
+}

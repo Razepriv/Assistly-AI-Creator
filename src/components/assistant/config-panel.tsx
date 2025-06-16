@@ -7,12 +7,13 @@ import ModelConfigTab from './model-config-tab';
 import AdvancedSettingsTab from './advanced-settings-tab';
 import VoiceSettingsTab from './voice-settings-tab';
 import TranscriberSettingsTab from './transcriber-settings-tab';
+import ChatHistoryTab from './chat-history-tab'; // New Import
 import { useForm, FormProvider } from 'react-hook-form';
 import type { AssistantConfig } from '@/types';
 import { useConfigStore } from '@/store/config-store';
 // import { useAssistantStore } from '@/store/assistant-store'; // Not directly used for name, editable name handles that
 import { Button } from '@/components/ui/button';
-import { Save, Settings2, SlidersHorizontal, Puzzle, BarChart2, Info, Mic2, Mic } from 'lucide-react';
+import { Save, Settings2, SlidersHorizontal, Puzzle, BarChart2, Info, Mic2, Mic, MessageSquare } from 'lucide-react'; // Added MessageSquare
 import { useToast } from "@/hooks/use-toast";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -272,10 +273,10 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
 
   return (
     <FormProvider {...methods}>
-      <div className="h-full flex flex-col"> {/* Ensure no onSubmit prop here */}
+      <div className="h-full flex flex-col"> {/* Main container is now a div, no onSubmit here */}
         <Tabs defaultValue="model" className="flex-1 flex flex-col overflow-hidden">
           <div className="px-1">
-            <TabsList className="grid w-full grid-cols-3 md:grid-cols-6 gap-2 h-auto p-1 bg-muted rounded-lg">
+            <TabsList className="grid w-full grid-cols-4 md:grid-cols-7 gap-2 h-auto p-1 bg-muted rounded-lg">
               <TabsTrigger value="model" className="flex-col md:flex-row h-auto py-2 data-[state=active]:bg-background data-[state=active]:shadow-md">
                 <Settings2 className="md:mr-2 h-5 w-5" /> Model
               </TabsTrigger>
@@ -287,6 +288,9 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
               </TabsTrigger>
               <TabsTrigger value="transcriber" className="flex-col md:flex-row h-auto py-2 data-[state=active]:bg-background data-[state=active]:shadow-md">
                 <Mic className="md:mr-2 h-5 w-5" /> Transcriber
+              </TabsTrigger>
+              <TabsTrigger value="chatHistory" className="flex-col md:flex-row h-auto py-2 data-[state=active]:bg-background data-[state=active]:shadow-md">
+                <MessageSquare className="md:mr-2 h-5 w-5" /> History
               </TabsTrigger>
               <TabsTrigger value="tools" disabled className="flex-col md:flex-row h-auto py-2"><Puzzle className="md:mr-2 h-5 w-5" /> Tools</TabsTrigger>
               <TabsTrigger value="analysis" disabled className="flex-col md:flex-row h-auto py-2"><BarChart2 className="md:mr-2 h-5 w-5" /> Analysis</TabsTrigger>
@@ -305,6 +309,9 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
             </TabsContent>
             <TabsContent value="transcriber" className="mt-0">
               <TranscriberSettingsTab />
+            </TabsContent>
+            <TabsContent value="chatHistory" className="mt-0">
+              <ChatHistoryTab assistantId={assistantId} />
             </TabsContent>
             <TabsContent value="tools" className="mt-0"><div className="p-4 text-center text-muted-foreground">Tools & Integrations coming soon.</div></TabsContent>
             <TabsContent value="analysis" className="mt-0"><div className="p-4 text-center text-muted-foreground">Analysis settings coming soon.</div></TabsContent>
