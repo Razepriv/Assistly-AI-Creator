@@ -36,8 +36,8 @@ const AssistantNavItem = React.memo(function AssistantNavItem({ assistant, isAct
     onClick(assistant.id);
   }, [onClick, assistant.id]);
 
-  const handleDelete = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeleteClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering onClick for the item itself
     onDelete(assistant);
   }, [onDelete, assistant]);
 
@@ -46,7 +46,7 @@ const AssistantNavItem = React.memo(function AssistantNavItem({ assistant, isAct
       <button
         onClick={handleClick}
         className={`flex-grow items-center px-3 py-2 text-left ${isActive ? 'font-semibold' : ''}`}
-        style={{ all: 'unset', display: 'flex', alignItems: 'center', cursor: 'pointer', width: 'calc(100% - 2.5rem)' }}
+        style={{ all: 'unset', display: 'flex', alignItems: 'center', cursor: 'pointer', width: 'calc(100% - 2.5rem)' }} // Ensure button takes up space
       >
         <Bot className="mr-2 h-4 w-4 flex-shrink-0" />
         <span className="truncate max-w-[150px]">{assistant.name}</span>
@@ -57,7 +57,7 @@ const AssistantNavItem = React.memo(function AssistantNavItem({ assistant, isAct
         variant="ghost"
         size="icon"
         className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 opacity-0 group-hover:opacity-100 focus:opacity-100 text-destructive hover:bg-destructive/10"
-        onClick={handleDelete}
+        onClick={handleDeleteClick}
         aria-label={`Delete ${assistant.name}`}
       >
         <Trash2 className="h-4 w-4" />
@@ -93,7 +93,8 @@ const CategoryHeaderButton = React.memo(function CategoryHeaderButton({ name, is
 export default function AppSidebar() {
   const allAssistantsFromStore = useAssistantStore((state) => state.assistants);
   const searchQuery = useAssistantStore((state) => state.searchQuery);
-  const activeAssistantId = useAssistantStore((state) => state.activeAssistantId);
+  // activeAssistantId is read directly inside handleDeleteConfirm via getState() where needed
+  // const activeAssistantId = useAssistantStore((state) => state.activeAssistantId); 
 
   const setActiveAssistantId = useAssistantStore((state) => state.setActiveAssistantId);
   const setSearchQuery = useAssistantStore((state) => state.setSearchQuery);
@@ -107,14 +108,17 @@ export default function AppSidebar() {
   const router = useRouter();
   const { toast } = useToast();
 
+  // Effect to sync activeAssistantId from URL
   useEffect(() => {
     const pathParts = pathname.split('/assistant/');
-    const currentIdFromPath = pathParts[1]?.split('/')[0]; // More robust split
+    const currentIdFromPath = pathParts[1]?.split('/')[0];
+    const currentActiveId = useAssistantStore.getState().activeAssistantId;
 
-    if (currentIdFromPath && currentIdFromPath !== activeAssistantId && !pathname.startsWith('/server-features-demo')) {
+
+    if (currentIdFromPath && currentIdFromPath !== currentActiveId && !pathname.startsWith('/server-features-demo')) {
       setActiveAssistantId(currentIdFromPath);
     }
-  }, [pathname, activeAssistantId, setActiveAssistantId]);
+  }, [pathname, setActiveAssistantId]);
 
   const handleAssistantClick = useCallback((id: string) => {
     setActiveAssistantId(id);
@@ -123,15 +127,14 @@ export default function AppSidebar() {
 
   const requestDeleteAssistant = useCallback((assistant: Assistant) => {
     setAssistantToDelete(assistant);
-  }, []);
+  }, [setAssistantToDelete]); // setAssistantToDelete is stable
 
   const handleDeleteConfirm = useCallback(() => {
     if (assistantToDelete) {
       const assistantName = assistantToDelete.name;
       const deletedAssistantId = assistantToDelete.id;
       
-      // Important: Get the current active ID *before* updating the store
-      const currentActiveId = activeAssistantId;
+      const currentActiveId = useAssistantStore.getState().activeAssistantId; 
       
       deleteAssistant(deletedAssistantId);
       deleteConfig(deletedAssistantId);
@@ -142,11 +145,7 @@ export default function AppSidebar() {
       });
 
       if (currentActiveId === deletedAssistantId) {
-        // Fetch assistants *after* deletion to determine next active
-        // This needs to read from the store *after* the delete operation has been processed
-        // One way to handle this is to rely on the store's updated state in the next render cycle.
-        // Or, derive remaining assistants from the current list before deleting.
-        const remainingAssistants = allAssistantsFromStore.filter(a => a.id !== deletedAssistantId);
+        const remainingAssistants = useAssistantStore.getState().assistants;
         if (remainingAssistants.length > 0) {
           const newActive = remainingAssistants[0];
           setActiveAssistantId(newActive.id);
@@ -158,8 +157,7 @@ export default function AppSidebar() {
       }
       setAssistantToDelete(null);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assistantToDelete, deleteAssistant, deleteConfig, toast, activeAssistantId, router, setActiveAssistantId, allAssistantsFromStore]);
+  }, [assistantToDelete, deleteAssistant, deleteConfig, toast, router, setActiveAssistantId, setAssistantToDelete]);
 
 
   const assistants = useMemo(() => {
@@ -202,7 +200,7 @@ export default function AppSidebar() {
 
   const toggleCategory = useCallback((category: string) => {
     setExpandedCategories(prev => ({ ...prev, [category]: !prev[category] }));
-  }, [setExpandedCategories]);
+  }, [setExpandedCategories]); // setExpandedCategories is stable
 
   const categorizedAssistants = useMemo(() => {
     return categories.map(categoryName => ({
@@ -214,6 +212,8 @@ export default function AppSidebar() {
   const uncategorizedAssistants = useMemo(() => {
     return assistants.filter(a => !a.category);
   }, [assistants]);
+
+  const activeAssistantIdForIsActive = useAssistantStore((state) => state.activeAssistantId);
 
 
   return (
@@ -256,7 +256,7 @@ export default function AppSidebar() {
                 <AssistantNavItem
                   key={assistant.id}
                   assistant={assistant}
-                  isActive={activeAssistantId === assistant.id && pathname.startsWith('/assistant/')}
+                  isActive={activeAssistantIdForIsActive === assistant.id && pathname.startsWith('/assistant/')}
                   onClick={handleAssistantClick}
                   onDelete={requestDeleteAssistant}
                 />
@@ -270,7 +270,7 @@ export default function AppSidebar() {
                 <AssistantNavItem
                   key={assistant.id}
                   assistant={assistant}
-                  isActive={activeAssistantId === assistant.id && pathname.startsWith('/assistant/')}
+                  isActive={activeAssistantIdForIsActive === assistant.id && pathname.startsWith('/assistant/')}
                   onClick={handleAssistantClick}
                   onDelete={requestDeleteAssistant}
                 />
@@ -308,3 +308,4 @@ export default function AppSidebar() {
     </div>
   );
 }
+
