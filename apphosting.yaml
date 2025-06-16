@@ -4,4 +4,13 @@
 runConfig:
   # Increase this value if you'd like to automatically spin up
   # more instances in response to increased traffic.
-  maxInstances: 1
+  # For ~1000 concurrent users, this might need to be higher
+  # depending on the app's resource intensity.
+  # Starting with 10 as an initial step.
+  maxInstances: 10
+  # You can also configure minInstances, cpu, and memoryLimits if needed:
+  # minInstances: 0
+  # cpu: 1
+  # memoryMiB: 512
+
+# Ensure you have billing enabled on your Firebase project for scaling beyond the free tier.
