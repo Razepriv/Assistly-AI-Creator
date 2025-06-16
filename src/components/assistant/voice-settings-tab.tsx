@@ -3,8 +3,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useFormContext, Controller } from 'react-hook-form';
-import { useActionState } from 'react'; // Corrected from ReactDOM.useFormState
-import { useFormStatus } from 'react-dom'; // Correct import
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
@@ -112,6 +112,7 @@ export default function VoiceSettingsTab() {
 
 
   useEffect(() => {
+    console.log('[VoiceSettingsTab] elevenLabsState changed:', elevenLabsState);
     if (elevenLabsState.success && elevenLabsState.audioBase64) {
       if (currentAudio) {
         currentAudio.pause();
@@ -130,12 +131,21 @@ export default function VoiceSettingsTab() {
         title: "Audio Preview Playing",
         description: "ElevenLabs audio preview is now playing.",
       });
+      console.log('[VoiceSettingsTab] Attempting to play audio.');
     } else if (!elevenLabsState.success && elevenLabsState.error) {
       toast({
         title: "ElevenLabs Preview Error",
         description: elevenLabsState.error,
         variant: "destructive",
       });
+      console.error('[VoiceSettingsTab] ElevenLabs State Error:', elevenLabsState.error);
+    } else if (elevenLabsState.success && !elevenLabsState.audioBase64) {
+        console.warn('[VoiceSettingsTab] ElevenLabs success but no audioBase64 data.');
+        toast({
+            title: "Preview Issue",
+            description: "Received success from server but no audio data.",
+            variant: "destructive",
+        });
     }
   }, [elevenLabsState, toast, currentAudio]);
 
@@ -471,19 +481,19 @@ export default function VoiceSettingsTab() {
             <div className="space-y-3">
                 <div className="flex items-center justify-between">
                     <Label htmlFor="voice.voiceEffects.echo">Echo Effect</Label>
-                    <Controller name="voice.voiceEffects.echo" control={control} render={({ field }) => <Switch id="voice.voiceEffects.echo" type="button" checked={field.value} onCheckedChange={field.onChange} />} />
+                    <Controller name="voice.voiceEffects.echo" control={control} render={({ field }) => <Switch type="button" id="voice.voiceEffects.echo" checked={field.value} onCheckedChange={field.onChange} />} />
                 </div>
                 <div className="flex items-center justify-between">
                     <Label htmlFor="voice.voiceEffects.reverb">Reverb Effect</Label>
-                    <Controller name="voice.voiceEffects.reverb" control={control} render={({ field }) => <Switch id="voice.voiceEffects.reverb" type="button" checked={field.value} onCheckedChange={field.onChange} />} />
+                    <Controller name="voice.voiceEffects.reverb" control={control} render={({ field }) => <Switch type="button" id="voice.voiceEffects.reverb" checked={field.value} onCheckedChange={field.onChange} />} />
                 </div>
                 <div className="flex items-center justify-between">
                     <Label htmlFor="voice.voiceEffects.clarityEnhancement">Clarity Enhancement</Label>
-                    <Controller name="voice.voiceEffects.clarityEnhancement" control={control} render={({ field }) => <Switch id="voice.voiceEffects.clarityEnhancement" type="button" checked={field.value} onCheckedChange={field.onChange} />} />
+                    <Controller name="voice.voiceEffects.clarityEnhancement" control={control} render={({ field }) => <Switch type="button" id="voice.voiceEffects.clarityEnhancement" checked={field.value} onCheckedChange={field.onChange} />} />
                 </div>
                 <div className="flex items-center justify-between">
                     <Label htmlFor="voice.noiseReduction">Background Noise Reduction (for synthesized voice)</Label>
-                    <Controller name="voice.noiseReduction" control={control} render={({ field }) => <Switch id="voice.noiseReduction" type="button" checked={field.value} onCheckedChange={field.onChange} />} />
+                    <Controller name="voice.noiseReduction" control={control} render={({ field }) => <Switch type="button" id="voice.noiseReduction" checked={field.value} onCheckedChange={field.onChange} />} />
                 </div>
             </div>
              <h4 className="text-md font-medium mt-4">Audio Quality Output</h4>
@@ -514,4 +524,3 @@ export default function VoiceSettingsTab() {
     </div>
   );
 }
-

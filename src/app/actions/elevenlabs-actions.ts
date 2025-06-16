@@ -56,11 +56,9 @@ export async function synthesizeElevenLabsSpeech(
 
   const body: Record<string, any> = {
     text: text,
+    model_id: modelId || "eleven_multilingual_v2", // Default to multilingual_v2 if not provided
   };
 
-  if (modelId) {
-    body.model_id = modelId;
-  }
   if (stability !== undefined || similarityBoost !== undefined) {
     body.voice_settings = {};
     if (stability !== undefined) {
@@ -82,7 +80,7 @@ export async function synthesizeElevenLabsSpeech(
     });
 
     if (!response.ok) {
-      let errorResponseText = await response.text(); // Read as text first for logging
+      let errorResponseText = await response.text(); 
       console.error('[ElevenLabs Action] API Error Status:', response.status);
       console.error('[ElevenLabs Action] API Error Response Text:', errorResponseText);
       
@@ -97,8 +95,7 @@ export async function synthesizeElevenLabsSpeech(
             errorDetailMessage = JSON.stringify(errorBodyJson);
         }
       } catch (e) {
-        // If parsing JSON fails, use the raw text (or a part of it)
-        errorDetailMessage = errorResponseText.substring(0, 500); // Limit length
+        errorDetailMessage = errorResponseText.substring(0, 500); 
       }
       
       return { error: `ElevenLabs API Error: ${response.status} - ${errorDetailMessage}`, success: false };
