@@ -99,8 +99,3 @@ export const useChatStore = create<ChatState>()(
     }
   )
 );
-
-// Helper to ensure nanoid is installed for this store
-// You might need to run: npm install nanoid
-// If it's not already in your dependencies.
-// I'll add it to package.json.
