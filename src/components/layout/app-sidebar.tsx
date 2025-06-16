@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAssistantStore } from '@/store/assistant-store';
 import { useConfigStore } from '@/store/config-store';
-import { Bot, Search, ChevronDown, ChevronRight, Trash2, PlusCircle, Server, Code } from 'lucide-react'; // Added Code icon
+import { Bot, Search, ChevronDown, ChevronRight, Trash2, PlusCircle, Server, Code } from 'lucide-react';
 import { CreateAssistantDialog } from '@/components/assistant/create-assistant-dialog';
 import {
   AlertDialog,
@@ -37,7 +37,7 @@ const AssistantNavItem = React.memo(function AssistantNavItem({ assistant, isAct
   }, [onClick, assistant.id]);
 
   const handleDeleteClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent triggering onClick for the item itself
+    e.stopPropagation();
     onDelete(assistant);
   }, [onDelete, assistant]);
 
@@ -46,7 +46,7 @@ const AssistantNavItem = React.memo(function AssistantNavItem({ assistant, isAct
       <button
         onClick={handleClick}
         className={`flex-grow items-center px-3 py-2 text-left ${isActive ? 'font-semibold' : ''}`}
-        style={{ all: 'unset', display: 'flex', alignItems: 'center', cursor: 'pointer', width: 'calc(100% - 2.5rem)' }} // Ensure button takes up space
+        style={{ all: 'unset', display: 'flex', alignItems: 'center', cursor: 'pointer', width: 'calc(100% - 2.5rem)' }}
       >
         <Bot className="mr-2 h-4 w-4 flex-shrink-0" />
         <div className="flex flex-col max-w-[150px] truncate">
@@ -94,6 +94,95 @@ const CategoryHeaderButton = React.memo(function CategoryHeaderButton({ name, is
   );
 });
 
+interface SidebarNavigationContentProps {
+  pathname: string;
+  categorizedAssistants: { name: string; assistants: Assistant[] }[];
+  uncategorizedAssistants: Assistant[];
+  activeAssistantId: string | null;
+  expandedCategories: Record<string, boolean>;
+  searchQuery: string;
+  assistantsCount: number; // Total number of assistants before filtering, to differentiate "No assistants created" from "No results"
+  handleAssistantClick: (id: string) => void;
+  requestDeleteAssistant: (assistant: Assistant) => void;
+  toggleCategory: (categoryName: string) => void;
+}
+
+const SidebarNavigationContent = React.memo(function SidebarNavigationContent({
+  pathname,
+  categorizedAssistants,
+  uncategorizedAssistants,
+  activeAssistantId,
+  expandedCategories,
+  searchQuery,
+  assistantsCount,
+  handleAssistantClick,
+  requestDeleteAssistant,
+  toggleCategory,
+}: SidebarNavigationContentProps) {
+  return (
+    <nav className="grid items-start px-4 text-sm font-medium">
+      <Link
+        href="/server-features-demo"
+        className={`group flex items-center rounded-lg px-3 py-2 mb-2 transition-colors hover:bg-sidebar-accent ${
+          pathname === '/server-features-demo'
+            ? 'bg-sidebar-primary text-sidebar-primary-foreground font-semibold'
+            : 'text-sidebar-foreground hover:text-sidebar-accent-foreground'
+        }`}
+      >
+        <Server className="mr-2 h-4 w-4 flex-shrink-0" />
+        Server Features
+      </Link>
+
+      {categorizedAssistants.map(categoryGroup => (
+        <div key={categoryGroup.name} className="py-1">
+          <CategoryHeaderButton
+            name={categoryGroup.name}
+            isExpanded={!!expandedCategories[categoryGroup.name]}
+            onToggle={toggleCategory}
+          />
+          {expandedCategories[categoryGroup.name] && categoryGroup.assistants.map((assistant) => (
+            <AssistantNavItem
+              key={assistant.id}
+              assistant={assistant}
+              isActive={activeAssistantId === assistant.id && pathname.startsWith('/assistant/')}
+              onClick={handleAssistantClick}
+              onDelete={requestDeleteAssistant}
+            />
+          ))}
+        </div>
+      ))}
+      {uncategorizedAssistants.length > 0 && (
+        <div className="py-1">
+          {categorizedAssistants.length > 0 && <div className="px-2 py-1 text-xs text-sidebar-foreground/50">Other Assistants</div>}
+          {uncategorizedAssistants.map((assistant) => (
+            <AssistantNavItem
+              key={assistant.id}
+              assistant={assistant}
+              isActive={activeAssistantId === assistant.id && pathname.startsWith('/assistant/')}
+              onClick={handleAssistantClick}
+              onDelete={requestDeleteAssistant}
+            />
+          ))}
+        </div>
+      )}
+      {(categorizedAssistants.length === 0 && uncategorizedAssistants.length === 0) && (
+        <>
+          {searchQuery && (
+            <div className="p-4 text-center text-sidebar-foreground/70">
+              No assistants found for "{searchQuery}".
+            </div>
+          )}
+          {!searchQuery && assistantsCount === 0 && (
+            <div className="p-4 text-center text-sidebar-foreground/70">
+              No assistants created yet.
+            </div>
+          )}
+        </>
+      )}
+    </nav>
+  );
+});
+
 
 export default function AppSidebar() {
   const allAssistantsFromStore = useAssistantStore((state) => state.assistants);
@@ -101,6 +190,7 @@ export default function AppSidebar() {
   const setActiveAssistantId = useAssistantStore((state) => state.setActiveAssistantId);
   const setSearchQuery = useAssistantStore((state) => state.setSearchQuery);
   const deleteAssistant = useAssistantStore((state) => state.deleteAssistant);
+  const activeAssistantIdForIsActive = useAssistantStore((state) => state.activeAssistantId); // Renamed for clarity
   const deleteConfig = useConfigStore((state) => state.deleteConfig);
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -110,10 +200,9 @@ export default function AppSidebar() {
   const router = useRouter();
   const { toast } = useToast();
 
-  // Effect to sync activeAssistantId from URL
   useEffect(() => {
     const pathParts = pathname.split('/assistant/');
-    const currentIdFromPath = pathParts[1]?.split('/')[0];
+    const currentIdFromPath = pathParts.length > 1 ? pathParts[1].split('/')[0] : undefined;
 
     if (pathname.startsWith('/assistant/') && currentIdFromPath) {
       if (useAssistantStore.getState().activeAssistantId !== currentIdFromPath) {
@@ -160,8 +249,7 @@ export default function AppSidebar() {
     }
   }, [assistantToDelete, deleteAssistant, deleteConfig, toast, router, setActiveAssistantId]);
 
-
-  const assistants = useMemo(() => {
+  const filteredAssistants = useMemo(() => {
     if (!searchQuery) {
       return allAssistantsFromStore;
     }
@@ -173,37 +261,32 @@ export default function AppSidebar() {
   }, [allAssistantsFromStore, searchQuery]);
 
   const categories = useMemo(() => {
-    return Array.from(new Set(assistants.map(a => a.category).filter(Boolean as (value: string | undefined) => value is string)));
-  }, [assistants]);
+    return Array.from(new Set(filteredAssistants.map(a => a.category).filter(Boolean as (value: string | undefined) => value is string)));
+  }, [filteredAssistants]);
 
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setExpandedCategories(currentExpanded => {
       const newExpectedState: Record<string, boolean> = {};
-      let hasContentChanged = false;
-
-      for (const cat of categories) {
+      categories.forEach(cat => {
         newExpectedState[cat] = currentExpanded.hasOwnProperty(cat) ? currentExpanded[cat] : true;
-      }
+      });
 
-      const currentKeys = Object.keys(currentExpanded);
-      const newKeys = Object.keys(newExpectedState);
-
-      if (currentKeys.length !== newKeys.length) {
-        hasContentChanged = true;
+      let changed = false;
+      if (Object.keys(newExpectedState).length !== Object.keys(currentExpanded).length) {
+        changed = true;
       } else {
-        for (const key of newKeys) {
-          if (!currentExpanded.hasOwnProperty(key) || currentExpanded[key] !== newExpectedState[key]) {
-            hasContentChanged = true;
+        for (const key in newExpectedState) {
+          if (newExpectedState[key] !== currentExpanded[key]) {
+            changed = true;
             break;
           }
         }
       }
-      return hasContentChanged ? newExpectedState : currentExpanded;
+      return changed ? newExpectedState : currentExpanded;
     });
   }, [categories]);
-
 
   const toggleCategory = useCallback((category: string) => {
     setExpandedCategories(prev => ({ ...prev, [category]: !prev[category] }));
@@ -212,16 +295,13 @@ export default function AppSidebar() {
   const categorizedAssistants = useMemo(() => {
     return categories.map(categoryName => ({
       name: categoryName,
-      assistants: assistants.filter(a => a.category === categoryName)
+      assistants: filteredAssistants.filter(a => a.category === categoryName)
     }));
-  }, [categories, assistants]);
+  }, [categories, filteredAssistants]);
 
   const uncategorizedAssistants = useMemo(() => {
-    return assistants.filter(a => !a.category);
-  }, [assistants]);
-
-  const activeAssistantIdForIsActive = useAssistantStore((state) => state.activeAssistantId);
-
+    return filteredAssistants.filter(a => !a.category);
+  }, [filteredAssistants]);
 
   return (
     <div className="flex h-full flex-col border-r bg-sidebar text-sidebar-foreground">
@@ -239,62 +319,18 @@ export default function AppSidebar() {
         </div>
       </div>
       <ScrollArea className="flex-1">
-        <nav className="grid items-start px-4 text-sm font-medium">
-          <Link
-            href="/server-features-demo"
-            className={`group flex items-center rounded-lg px-3 py-2 mb-2 transition-colors hover:bg-sidebar-accent ${
-              pathname === '/server-features-demo'
-                ? 'bg-sidebar-primary text-sidebar-primary-foreground font-semibold'
-                : 'text-sidebar-foreground hover:text-sidebar-accent-foreground'
-            }`}
-          >
-            <Server className="mr-2 h-4 w-4 flex-shrink-0" />
-            Server Features
-          </Link>
-
-          {categorizedAssistants.map(categoryGroup => (
-            <div key={categoryGroup.name} className="py-1">
-              <CategoryHeaderButton
-                name={categoryGroup.name}
-                isExpanded={!!expandedCategories[categoryGroup.name]}
-                onToggle={toggleCategory}
-              />
-              {expandedCategories[categoryGroup.name] && categoryGroup.assistants.map((assistant) => (
-                <AssistantNavItem
-                  key={assistant.id}
-                  assistant={assistant}
-                  isActive={activeAssistantIdForIsActive === assistant.id && pathname.startsWith('/assistant/')}
-                  onClick={handleAssistantClick}
-                  onDelete={requestDeleteAssistant}
-                />
-              ))}
-            </div>
-          ))}
-          {uncategorizedAssistants.length > 0 && (
-            <div className="py-1">
-              {categories.length > 0 && <div className="px-2 py-1 text-xs text-sidebar-foreground/50">Other Assistants</div>}
-              {uncategorizedAssistants.map((assistant) => (
-                <AssistantNavItem
-                  key={assistant.id}
-                  assistant={assistant}
-                  isActive={activeAssistantIdForIsActive === assistant.id && pathname.startsWith('/assistant/')}
-                  onClick={handleAssistantClick}
-                  onDelete={requestDeleteAssistant}
-                />
-              ))}
-            </div>
-          )}
-          {assistants.length === 0 && !searchQuery && (
-            <div className="p-4 text-center text-sidebar-foreground/70">
-              No assistants created yet.
-            </div>
-          )}
-          {assistants.length === 0 && searchQuery && (
-             <div className="p-4 text-center text-sidebar-foreground/70">
-              No assistants found for "{searchQuery}".
-            </div>
-          )}
-        </nav>
+        <SidebarNavigationContent
+          pathname={pathname}
+          categorizedAssistants={categorizedAssistants}
+          uncategorizedAssistants={uncategorizedAssistants}
+          activeAssistantId={activeAssistantIdForIsActive}
+          expandedCategories={expandedCategories}
+          searchQuery={searchQuery}
+          assistantsCount={allAssistantsFromStore.length}
+          handleAssistantClick={handleAssistantClick}
+          requestDeleteAssistant={requestDeleteAssistant}
+          toggleCategory={toggleCategory}
+        />
       </ScrollArea>
       <AlertDialog open={!!assistantToDelete} onOpenChange={(open) => !open && setAssistantToDelete(null)}>
         <AlertDialogContent>
@@ -315,3 +351,4 @@ export default function AppSidebar() {
     </div>
   );
 }
+    
