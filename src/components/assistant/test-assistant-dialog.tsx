@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Bot, User, Mic, Send, Loader2, Paperclip, Download, Library, StopCircle, AlertTriangle, Play } from 'lucide-react'; // Added Play
+import { Bot, User, Mic, Send, Loader2, Paperclip, Download, Library, StopCircle, AlertTriangle, Play } from 'lucide-react';
 import type { AssistantConfig, TestChatMessage } from '@/types';
 import { useConfigStore } from '@/store/config-store';
 import { testAssistantChat } from '@/ai/flows/test-assistant-chat-flow';
@@ -39,9 +39,17 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
   const [isRecording, setIsRecording] = useState(false);
   const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const [hasMicPermission, setHasMicPermission] = useState<boolean | null>(null); 
+  const [hasMicPermission, setHasMicPermission] = useState<boolean | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const speechSynthesisRef = useRef(window.speechSynthesis);
+  const speechSynthesisRef = useRef<SpeechSynthesis | null>(null);
+
+
+  useEffect(() => {
+    // Initialize SpeechSynthesis API only on the client-side
+    if (typeof window !== 'undefined') {
+      speechSynthesisRef.current = window.speechSynthesis;
+    }
+  }, []);
 
 
   useEffect(() => {
@@ -49,7 +57,7 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
       const config = getConfig(assistantId);
       if (config) {
         setAssistantConfig(config);
-        if (open && chatHistory.length === 0) {
+        if (open && chatHistory.length === 0 && config.firstMessage) {
           setChatHistory([{ id: nanoid(), role: 'assistant', content: config.firstMessage }]);
         }
       } else {
@@ -67,10 +75,10 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
       if (speechSynthesisRef.current && speechSynthesisRef.current.speaking) {
         speechSynthesisRef.current.cancel();
       }
-      setHasMicPermission(null); 
+      setHasMicPermission(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assistantId, open, getConfig, onOpenChange]);
+  }, [assistantId, open, getConfig, onOpenChange]); // Removed chatHistory from deps to avoid reset on every message
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -80,6 +88,11 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
 
   const requestMicPermission = async () => {
     if (hasMicPermission === true) return true;
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices) {
+        toast({ variant: 'destructive', title: 'Unsupported Browser', description: 'Media devices are not supported in this browser.' });
+        setHasMicPermission(false);
+        return false;
+    }
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
       setHasMicPermission(true);
@@ -109,26 +122,21 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
           setAudioChunks((prev) => [...prev, event.data]);
         };
         mediaRecorderRef.current.onstop = async () => {
-          // const audioBlob = new Blob(audioChunks, { type: 'audio/webm' }); // In future, send this blob
-          setAudioChunks([]); 
+          // const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          setAudioChunks([]);
           
           setIsLoading(true);
           const thinkingMsgId = nanoid();
-          // Add a placeholder indicating voice input to the chat history immediately
           const userVoiceMessage: TestChatMessage = { id: nanoid(), role: 'user', content: "[User Voice Note]" };
           setChatHistory(prev => [...prev, userVoiceMessage]);
           
-          // Simulate a brief "transcription" period before sending to AI
-          // In a real app, this is where you'd call the transcription service.
           setChatHistory(prev => [...prev, {id: thinkingMsgId, role: 'assistant', content: 'Processing voice note...', isThinking: true}]);
           
-          await new Promise(resolve => setTimeout(resolve, 700)); // Short delay
+          await new Promise(resolve => setTimeout(resolve, 700)); 
 
-          setChatHistory(prev => prev.filter(msg => msg.id !== thinkingMsgId)); // Remove "Processing..."
+          setChatHistory(prev => prev.filter(msg => msg.id !== thinkingMsgId)); 
           
-          // Send the placeholder text to the assistant flow.
-          // The actual audio data isn't used by the flow yet.
-          handleSendMessage(userVoiceMessage.content, true); 
+          handleSendMessage(userVoiceMessage.content, true);
           setIsLoading(false);
 
           stream.getTracks().forEach(track => track.stop());
@@ -140,7 +148,7 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
       } catch (err) {
         console.error('Error starting recording:', err);
         toast({ title: "Recording Error", description: "Could not start recording.", variant: "destructive" });
-        setHasMicPermission(false); 
+        setHasMicPermission(false);
       }
     } else {
       toast({ title: "Unsupported", description: "Your browser doesn't support audio recording.", variant: "destructive" });
@@ -166,21 +174,32 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
   const handleSendMessage = useCallback(async (messageContent: string, isFromVoiceNote = false) => {
     if (!messageContent.trim() || !assistantConfig) return;
 
-    if (!isFromVoiceNote) { // If it's a text message, add it to history now. Voice notes are added earlier.
-        const userMessage: TestChatMessage = { id: nanoid(), role: 'user', content: messageContent.trim() };
+    const userMessage: TestChatMessage = { id: nanoid(), role: 'user', content: messageContent.trim() };
+    
+    if (!isFromVoiceNote) {
         setChatHistory(prev => [...prev, userMessage]);
-        setCurrentMessage('');
     }
+    setCurrentMessage('');
     
     setIsLoading(true);
     const thinkingMessageId = nanoid();
     setChatHistory(prev => [...prev, { id: thinkingMessageId, role: 'assistant', content: '...', isThinking: true }]);
 
     try {
+      // Create a snapshot of chat history to pass to the flow, excluding the current thinking bubble
+      // and ensure voice notes are not re-sent as user text.
+      const historyForFlow = chatHistory.filter(msg => msg.id !== thinkingMessageId);
+      if (isFromVoiceNote) { // The voice note placeholder was already added
+         // We don't add 'userMessage' here again as it's already in chatHistory for voice notes
+      } else { // For text messages, userMessage needs to be added before 'thinking' to historyForFlow
+          historyForFlow.push(userMessage);
+      }
+
+
       const response = await testAssistantChat({
-        userInput: messageContent, // Send the actual content (or placeholder for voice)
+        userInput: userMessage.content, // Send the actual content
         assistantConfig: assistantConfig,
-        chatHistory: chatHistory.filter(msg => !msg.isThinking && msg.role !== 'user' || (msg.role === 'user' && msg.content !== "[User Voice Note]" ) ), // More robust history filtering
+        chatHistory: historyForFlow, // Pass the prepared history
       });
       
       setChatHistory(prev => prev.map(msg => 
@@ -190,7 +209,7 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
     } catch (error) {
       console.error("Error calling testAssistantChat flow:", error);
       toast({ title: "AI Error", description: "Failed to get a response from the assistant.", variant: "destructive" });
-      setChatHistory(prev => prev.filter(msg => msg.id !== thinkingMessageId)); // Remove thinking bubble
+      setChatHistory(prev => prev.filter(msg => msg.id !== thinkingMessageId));
       setChatHistory(prev => [...prev, {id: nanoid(), role: 'assistant', content: "Sorry, I encountered an error."}]);
     } finally {
       setIsLoading(false);
@@ -209,11 +228,9 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
       return;
     }
     if (speechSynthesisRef.current.speaking) {
-      speechSynthesisRef.current.cancel(); // Stop any current speech
+      speechSynthesisRef.current.cancel(); 
     }
     const utterance = new SpeechSynthesisUtterance(text);
-    // You could add voice selection logic here if desired, e.g., based on assistantConfig.voice
-    // utterance.voice = speechSynthesisRef.current.getVoices().find(v => v.name === 'Google UK English Female'); // Example
     utterance.onerror = (event) => {
       console.error('SpeechSynthesisUtterance.onerror', event);
       toast({ title: "Playback Error", description: `Could not play audio: ${event.error}`, variant: "destructive"});
@@ -272,17 +289,18 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
                             : 'bg-muted text-foreground rounded-bl-none'
                         } ${msg.isThinking ? 'italic text-muted-foreground' : ''}`}
                     >
-                        {msg.content.split('\n').map((line, i) => (
+                        {msg.content.split('\\n').map((line, i) => (
                             <React.Fragment key={i}>
                             {line}
-                            {i < msg.content.split('\n').length - 1 && <br />}
+                            {i < msg.content.split('\\n').length - 1 && <br />}
                             </React.Fragment>
                         ))}
                     </div>
                     {msg.role === 'assistant' && !msg.isThinking && msg.content && (
-                        <Button 
-                            variant="ghost" 
-                            size="sm" 
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
                             onClick={() => playAssistantResponse(msg.content)}
                             className="mt-1 px-2 py-1 h-auto text-xs text-muted-foreground hover:text-primary"
                             aria-label="Play assistant response"
@@ -311,14 +329,14 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
             </div>
           )}
           <form onSubmit={handleFormSubmit} className="flex items-center gap-2">
-            <Button 
-              type="button" 
-              variant="ghost" 
-              size="icon" 
-              className={`${isRecording ? 'bg-red-500 hover:bg-red-600' : 'bg-pink-500 hover:bg-pink-600'} text-white rounded-full h-10 w-10`} 
-              onClick={handleVoiceInputClick} 
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={`${isRecording ? 'bg-red-500 hover:bg-red-600' : 'bg-pink-500 hover:bg-pink-600'} text-white rounded-full h-10 w-10`}
+              onClick={handleVoiceInputClick}
               aria-label={isRecording ? "Stop recording" : "Start voice input"}
-              disabled={isLoading || hasMicPermission === false} 
+              disabled={isLoading || hasMicPermission === false}
             >
               {isRecording ? <StopCircle className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
             </Button>
@@ -328,7 +346,7 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
               value={currentMessage}
               onChange={(e) => setCurrentMessage(e.target.value)}
               className="flex-1 h-10"
-              disabled={isLoading || isRecording} 
+              disabled={isLoading || isRecording}
             />
             <Button type="submit" size="icon" className="h-10 w-10" disabled={isLoading || isRecording || !currentMessage.trim()}>
               {isLoading && !isRecording && !chatHistory.some(msg => msg.isThinking) ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
@@ -347,6 +365,3 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
     </Dialog>
   );
 }
-
-
-    
