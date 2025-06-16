@@ -7,10 +7,11 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
-import { UploadCloud, FileText, X, AlertCircle, Zap } from 'lucide-react';
+import { UploadCloud, FileText, X, AlertCircle, Zap, Loader2 } from 'lucide-react';
 import SuggestedFiles from '@/components/assistant/suggested-files';
 import type { AssistantConfig, FileMetadata } from '@/types';
 import { useToast } from "@/hooks/use-toast";
+import { useConfigStore } from '@/store/config-store'; // Import useConfigStore
 
 const MAX_FILES = 10;
 const MAX_FILE_SIZE_MB = 5;
@@ -19,6 +20,10 @@ const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 export default function AdvancedSettingsTab() {
   const { control, watch, setValue, formState: { errors } } = useFormContext<AssistantConfig>();
   const { toast } = useToast();
+
+  const assistantId = watch('id'); // Get current assistant's ID
+  const runtimeLatencies = useConfigStore((state) => state.runtimeLatencies);
+  const latestLatency = assistantId ? runtimeLatencies[assistantId] : null;
 
   const files = watch('files', []);
   const temperature = watch('temperature', 0.7);
@@ -38,16 +43,16 @@ export default function AdvancedSettingsTab() {
         return new Promise<FileMetadata | null>((resolve) => {
           if (currentFiles.some(f => f.name === file.name)) {
             skippedFilesCount++;
-            resolve(null); // Skip duplicate
+            resolve(null); 
             return;
           }
           if (file.size > MAX_FILE_SIZE_BYTES) {
             oversizedFilesCount++;
-            resolve(null); // Skip oversized
+            resolve(null); 
             return;
           }
           if (totalFilesAfterAdd >= MAX_FILES) {
-            resolve(null); // Skip if max files limit reached
+            resolve(null); 
             return;
           }
           
@@ -62,7 +67,7 @@ export default function AdvancedSettingsTab() {
             });
           };
           reader.onerror = () => {
-            resolve(null); // Error reading file
+            resolve(null); 
           };
           reader.readAsDataURL(file);
         });
@@ -82,11 +87,11 @@ export default function AdvancedSettingsTab() {
          toast({
           title: "Files Skipped",
           description: `${skippedFilesCount > 0 ? `${skippedFilesCount} duplicates skipped. ` : ''}${oversizedFilesCount > 0 ? `${oversizedFilesCount} oversized files skipped. ` : ''}${selectedFiles.length > 0 && totalFilesAfterAdd >= MAX_FILES && newFilesToAdd.length === 0 ? `File limit of ${MAX_FILES} reached.` : ''}`,
-          variant: "default" // "destructive" might be too strong if only some are skipped
+          variant: "default"
         });
       }
       
-      setFileInputKey(Date.now()); // Reset file input
+      setFileInputKey(Date.now()); 
     }
   }, [files, setValue, toast]);
 
@@ -121,7 +126,7 @@ export default function AdvancedSettingsTab() {
                 id="maxTokens"
                 type="number"
                 {...field}
-                value={field.value || ''} // Ensure input is controlled even if value is 0 or undefined initially
+                value={field.value || ''} 
                 onChange={e => {
                     const val = e.target.value;
                     field.onChange(val === '' ? undefined : parseInt(val, 10));
@@ -218,11 +223,17 @@ export default function AdvancedSettingsTab() {
           Performance Metrics
         </h3>
         <div className="mt-2 p-4 border rounded-lg bg-card/50">
-          <p className="text-sm text-muted-foreground">
-            AI response latency from the "Test Assistant" dialog will be displayed there after each interaction.
-          </p>
+          {latestLatency !== null && latestLatency !== undefined ? (
+            <p className="text-sm text-foreground">
+              Latest AI Response Latency: <span className="font-semibold text-primary">{latestLatency}ms</span>
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No latency data yet. Run a test in the "Test Assistant" dialog.
+            </p>
+          )}
           <p className="text-xs text-muted-foreground mt-1">
-            This provides a general idea of the assistant's responsiveness.
+            This value updates in real-time as you interact with the assistant in the "Test Assistant" dialog.
           </p>
         </div>
       </div>

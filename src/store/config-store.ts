@@ -8,12 +8,14 @@ interface ConfigState {
   configs: Record<string, AssistantConfig>;
   isLoading: boolean;
   error: string | null;
+  runtimeLatencies: Record<string, number | null>; // New: For real-time latency display
   
   loadConfig: (assistantId: string, assistantName: string) => AssistantConfig;
   updateConfig: (assistantId: string, updates: Partial<AssistantConfig>) => void;
   getConfig: (assistantId: string) => AssistantConfig | undefined;
   deleteConfig: (assistantId: string) => void;
   createConfig: (assistantId: string, assistantName: string) => AssistantConfig;
+  setAssistantLatency: (assistantId: string, latency: number | null) => void; // New action
 }
 
 export const useConfigStore = create<ConfigState>()(
@@ -22,13 +24,13 @@ export const useConfigStore = create<ConfigState>()(
       configs: INITIAL_ASSISTANT_CONFIGS,
       isLoading: false,
       error: null,
+      runtimeLatencies: {}, // Initial empty object for latencies
 
       loadConfig: (assistantId, assistantName) => {
         let config = get().configs[assistantId];
         let needsUpdateInStore = false;
 
         if (config) {
-          // Ensure existing configs have default voice and transcriber if they are missing
           const MappedVoiceConfig = config.voice || DEFAULT_VOICE_CONFIG;
           const MappedTranscriberConfig = config.transcriber || DEFAULT_TRANSCRIBER_CONFIG;
 
@@ -41,13 +43,11 @@ export const useConfigStore = create<ConfigState>()(
             needsUpdateInStore = true;
           }
         } else {
-          // If no config exists, create a new one (createConfig saves to store)
           config = get().createConfig(assistantId, assistantName);
-          // No need for needsUpdateInStore = true here as createConfig handles it.
         }
         
         if (needsUpdateInStore && config) {
-          const newConfigToStore = config; // Capture current value for closure
+          const newConfigToStore = config; 
           set(state => ({
             configs: {
               ...state.configs,
@@ -55,7 +55,7 @@ export const useConfigStore = create<ConfigState>()(
             }
           }));
         }
-        return config!; // Config is guaranteed to be defined here
+        return config!; 
       },
       
       updateConfig: (assistantId, updates) => {
@@ -65,7 +65,6 @@ export const useConfigStore = create<ConfigState>()(
             assistantName: updates.assistantName || 'Unknown Assistant', 
             ...DEFAULT_ASSISTANT_CONFIG 
           };
-          // Ensure voice and transcriber objects are merged correctly if partial updates are provided
           const newVoice = updates.voice ? { ...(currentConfig.voice || DEFAULT_VOICE_CONFIG), ...updates.voice } : (currentConfig.voice || DEFAULT_VOICE_CONFIG);
           const newTranscriber = updates.transcriber ? { ...(currentConfig.transcriber || DEFAULT_TRANSCRIBER_CONFIG), ...updates.transcriber } : (currentConfig.transcriber || DEFAULT_TRANSCRIBER_CONFIG);
           
@@ -86,8 +85,6 @@ export const useConfigStore = create<ConfigState>()(
       },
 
       getConfig: (assistantId: string) => {
-        // Now that loadConfig and createConfig ensure defaults are in the store,
-        // getConfig can simply return the stored object.
         return get().configs[assistantId];
       },
 
@@ -95,7 +92,9 @@ export const useConfigStore = create<ConfigState>()(
         set(state => {
           const newConfigs = { ...state.configs };
           delete newConfigs[assistantId];
-          return { configs: newConfigs };
+          const newRuntimeLatencies = { ...state.runtimeLatencies };
+          delete newRuntimeLatencies[assistantId];
+          return { configs: newConfigs, runtimeLatencies: newRuntimeLatencies };
         });
       },
 
@@ -103,7 +102,7 @@ export const useConfigStore = create<ConfigState>()(
         const newConfig: AssistantConfig = {
           id: assistantId,
           assistantName: assistantName,
-          ...DEFAULT_ASSISTANT_CONFIG, // This now includes default voice and transcriber
+          ...DEFAULT_ASSISTANT_CONFIG, 
         };
         set(state => ({
           configs: {
@@ -112,11 +111,21 @@ export const useConfigStore = create<ConfigState>()(
           }
         }));
         return newConfig;
+      },
+
+      setAssistantLatency: (assistantId: string, latency: number | null) => {
+        set(state => ({
+          runtimeLatencies: {
+            ...state.runtimeLatencies,
+            [assistantId]: latency,
+          }
+        }));
       }
     }),
     {
       name: 'assistly-config-storage',
       storage: createJSONStorage(() => localStorage),
+      // Only persist 'configs'. 'runtimeLatencies' will be transient.
       partialize: (state) => ({ configs: state.configs }), 
     }
   )
