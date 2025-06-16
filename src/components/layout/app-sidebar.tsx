@@ -93,9 +93,6 @@ const CategoryHeaderButton = React.memo(function CategoryHeaderButton({ name, is
 export default function AppSidebar() {
   const allAssistantsFromStore = useAssistantStore((state) => state.assistants);
   const searchQuery = useAssistantStore((state) => state.searchQuery);
-  // activeAssistantId is read directly inside handleDeleteConfirm via getState() where needed
-  // const activeAssistantId = useAssistantStore((state) => state.activeAssistantId); 
-
   const setActiveAssistantId = useAssistantStore((state) => state.setActiveAssistantId);
   const setSearchQuery = useAssistantStore((state) => state.setSearchQuery);
   const deleteAssistant = useAssistantStore((state) => state.deleteAssistant);
@@ -112,11 +109,21 @@ export default function AppSidebar() {
   useEffect(() => {
     const pathParts = pathname.split('/assistant/');
     const currentIdFromPath = pathParts[1]?.split('/')[0];
-    const currentActiveId = useAssistantStore.getState().activeAssistantId;
 
-
-    if (currentIdFromPath && currentIdFromPath !== currentActiveId && !pathname.startsWith('/server-features-demo')) {
-      setActiveAssistantId(currentIdFromPath);
+    if (pathname.startsWith('/assistant/') && currentIdFromPath) {
+      if (useAssistantStore.getState().activeAssistantId !== currentIdFromPath) {
+        setActiveAssistantId(currentIdFromPath);
+      }
+    } else {
+      // If not on an assistant page (and not server-features-demo), 
+      // and an assistant is active, consider deactivating.
+      // This behavior might need adjustment based on UX requirements for other non-assistant pages.
+      if (useAssistantStore.getState().activeAssistantId !== null && 
+          !pathname.startsWith('/server-features-demo') && 
+          !pathname.startsWith('/assistant/')) {
+        // setActiveAssistantId(null); // Commented out: this could be too aggressive.
+                                    // `src/app/page.tsx` handles initial routing logic.
+      }
     }
   }, [pathname, setActiveAssistantId]);
 
@@ -127,14 +134,14 @@ export default function AppSidebar() {
 
   const requestDeleteAssistant = useCallback((assistant: Assistant) => {
     setAssistantToDelete(assistant);
-  }, [setAssistantToDelete]); // setAssistantToDelete is stable
+  }, []); 
 
   const handleDeleteConfirm = useCallback(() => {
     if (assistantToDelete) {
       const assistantName = assistantToDelete.name;
       const deletedAssistantId = assistantToDelete.id;
       
-      const currentActiveId = useAssistantStore.getState().activeAssistantId; 
+      const currentActiveIdInStore = useAssistantStore.getState().activeAssistantId; 
       
       deleteAssistant(deletedAssistantId);
       deleteConfig(deletedAssistantId);
@@ -144,20 +151,20 @@ export default function AppSidebar() {
         description: `"${assistantName}" has been deleted.`,
       });
 
-      if (currentActiveId === deletedAssistantId) {
+      if (currentActiveIdInStore === deletedAssistantId) {
         const remainingAssistants = useAssistantStore.getState().assistants;
         if (remainingAssistants.length > 0) {
           const newActive = remainingAssistants[0];
-          setActiveAssistantId(newActive.id);
-          router.push(`/assistant/${newActive.id}`);
+          setActiveAssistantId(newActive.id); // Update store
+          router.push(`/assistant/${newActive.id}`); // Navigate
         } else {
-          setActiveAssistantId(null);
-          router.push('/');
+          setActiveAssistantId(null); // Update store
+          router.push('/'); // Navigate
         }
       }
       setAssistantToDelete(null);
     }
-  }, [assistantToDelete, deleteAssistant, deleteConfig, toast, router, setActiveAssistantId, setAssistantToDelete]);
+  }, [assistantToDelete, deleteAssistant, deleteConfig, toast, router, setActiveAssistantId]);
 
 
   const assistants = useMemo(() => {
@@ -178,29 +185,42 @@ export default function AppSidebar() {
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    setExpandedCategories(prevExpanded => {
-      const newExpanded = { ...prevExpanded };
-      let changed = false;
+    setExpandedCategories(currentExpanded => {
+      const newExpectedState: Record<string, boolean> = {};
+      let hasContentChanged = false;
+
+      // Build the new state based on current categories,
+      // preserving existing true/false states for categories that still exist,
+      // and defaulting new categories to true.
       for (const cat of categories) {
-        if (!(cat in newExpanded)) {
-          newExpanded[cat] = true; 
-          changed = true;
+        newExpectedState[cat] = currentExpanded.hasOwnProperty(cat) ? currentExpanded[cat] : true;
+      }
+
+      // Compare newExpectedState with currentExpanded content-wise
+      const currentKeys = Object.keys(currentExpanded);
+      const newKeys = Object.keys(newExpectedState);
+
+      if (currentKeys.length !== newKeys.length) {
+        hasContentChanged = true;
+      } else {
+        for (const key of newKeys) {
+          // Check if key exists in current (it should if lengths are same and no keys removed)
+          // and if its value is different.
+          if (!currentExpanded.hasOwnProperty(key) || currentExpanded[key] !== newExpectedState[key]) {
+            hasContentChanged = true;
+            break;
+          }
         }
       }
-      for (const existingCat in newExpanded) {
-        if (!categories.includes(existingCat)) {
-          delete newExpanded[existingCat];
-          changed = true;
-        }
-      }
-      return changed ? newExpanded : prevExpanded;
+      // Only return a new object if the content has actually changed.
+      return hasContentChanged ? newExpectedState : currentExpanded;
     });
   }, [categories]);
 
 
   const toggleCategory = useCallback((category: string) => {
     setExpandedCategories(prev => ({ ...prev, [category]: !prev[category] }));
-  }, [setExpandedCategories]); // setExpandedCategories is stable
+  }, []); 
 
   const categorizedAssistants = useMemo(() => {
     return categories.map(categoryName => ({
@@ -265,7 +285,7 @@ export default function AppSidebar() {
           ))}
           {uncategorizedAssistants.length > 0 && (
             <div className="py-1">
-              {categorizedAssistants.length > 0 && <div className="px-2 py-1 text-xs text-sidebar-foreground/50">Other Assistants</div>}
+              {categories.length > 0 && <div className="px-2 py-1 text-xs text-sidebar-foreground/50">Other Assistants</div>}
               {uncategorizedAssistants.map((assistant) => (
                 <AssistantNavItem
                   key={assistant.id}
@@ -308,4 +328,3 @@ export default function AppSidebar() {
     </div>
   );
 }
-
