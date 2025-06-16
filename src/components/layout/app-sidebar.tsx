@@ -1,15 +1,15 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useAssistantStore, selectFilteredAssistants } from '@/store/assistant-store';
+import { useAssistantStore } from '@/store/assistant-store';
 import { useConfigStore } from '@/store/config-store';
-import { Bot, Search, ChevronDown, ChevronRight, Trash2, PlusCircle, Server } from 'lucide-react'; // Added Server icon
+import { Bot, Search, ChevronDown, ChevronRight, Trash2, PlusCircle, Server } from 'lucide-react';
 import { CreateAssistantDialog } from '@/components/assistant/create-assistant-dialog';
 import {
   AlertDialog,
@@ -25,10 +25,11 @@ import { useToast } from "@/hooks/use-toast";
 import type { Assistant } from '@/types';
 
 export default function AppSidebar() {
-  const assistants = useAssistantStore(selectFilteredAssistants);
-  const activeAssistantId = useAssistantStore((state) => state.activeAssistantId);
-  const setActiveAssistantId = useAssistantStore((state) => state.setActiveAssistantId);
+  const allAssistantsFromStore = useAssistantStore((state) => state.assistants);
   const searchQuery = useAssistantStore((state) => state.searchQuery);
+  const activeAssistantId = useAssistantStore((state) => state.activeAssistantId);
+  
+  const setActiveAssistantId = useAssistantStore((state) => state.setActiveAssistantId);
   const setSearchQuery = useAssistantStore((state) => state.setSearchQuery);
   const deleteAssistant = useAssistantStore((state) => state.deleteAssistant);
   const deleteConfig = useConfigStore((state) => state.deleteConfig);
@@ -54,21 +55,24 @@ export default function AppSidebar() {
 
   const requestDeleteAssistant = useCallback((assistant: Assistant) => {
     setAssistantToDelete(assistant);
-  }, []); // setAssistantToDelete is stable from useState
+  }, []); 
 
   const handleDeleteConfirm = () => {
     if (assistantToDelete) {
       const assistantName = assistantToDelete.name;
-      deleteAssistant(assistantToDelete.id);
-      deleteConfig(assistantToDelete.id);
+      const deletedAssistantId = assistantToDelete.id;
+      deleteAssistant(deletedAssistantId);
+      deleteConfig(deletedAssistantId);
       toast({
         title: "Assistant Deleted",
         description: `"${assistantName}" has been deleted.`,
       });
-      if (activeAssistantId === assistantToDelete.id) {
-        const remainingAssistants = assistants.filter(a => a.id !== assistantToDelete.id);
+      
+      if (activeAssistantId === deletedAssistantId) {
+        // Need to re-fetch assistants *after* deletion to determine next active
+        const remainingAssistants = allAssistantsFromStore.filter(a => a.id !== deletedAssistantId);
         if (remainingAssistants.length > 0) {
-            const newActive = remainingAssistants[0];
+            const newActive = remainingAssistants[0]; // Or some other logic
             setActiveAssistantId(newActive.id);
             router.push(`/assistant/${newActive.id}`);
         } else {
@@ -80,20 +84,61 @@ export default function AppSidebar() {
     }
   };
 
-  const categories = Array.from(new Set(assistants.map(a => a.category).filter(Boolean)));
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>(
-    categories.reduce((acc, cat) => ({ ...acc, [cat!]: true }), {})
-  );
+  const assistants = useMemo(() => {
+    if (!searchQuery) {
+      return allAssistantsFromStore;
+    }
+    return allAssistantsFromStore.filter(
+      (assistant) =>
+        assistant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (assistant.description && assistant.description.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  }, [allAssistantsFromStore, searchQuery]);
+
+  const categories = useMemo(() => {
+    return Array.from(new Set(assistants.map(a => a.category).filter(Boolean as (value: string | undefined) => value is string)));
+  }, [assistants]);
+
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setExpandedCategories(prev => {
+      const newExpandedState = { ...prev };
+      let madeChange = false;
+      for (const cat of categories) {
+        if (!(cat in newExpandedState)) {
+          newExpandedState[cat] = true; // Default new categories to expanded
+          madeChange = true;
+        }
+      }
+      // Optional: remove categories from expandedState if they no longer exist in the `categories` list
+      // This loop helps clean up if categories are removed (e.g. all assistants in a category deleted)
+      for (const existingCat in newExpandedState) {
+         if (!categories.includes(existingCat)) {
+             delete newExpandedState[existingCat];
+             madeChange = true;
+         }
+      }
+      return madeChange ? newExpandedState : prev;
+    });
+  }, [categories]);
+
 
   const toggleCategory = (category: string) => {
     setExpandedCategories(prev => ({ ...prev, [category]: !prev[category] }));
   };
 
-  const categorizedAssistants = categories.map(category => ({
-    name: category!,
-    assistants: assistants.filter(a => a.category === category)
-  }));
-  const uncategorizedAssistants = assistants.filter(a => !a.category);
+  const categorizedAssistants = useMemo(() => {
+    return categories.map(categoryName => ({
+      name: categoryName,
+      assistants: assistants.filter(a => a.category === categoryName)
+    }));
+  }, [categories, assistants]);
+
+  const uncategorizedAssistants = useMemo(() => {
+    return assistants.filter(a => !a.category);
+  }, [assistants]);
+
 
   return (
     <div className="flex h-full flex-col border-r bg-sidebar text-sidebar-foreground">
@@ -124,17 +169,17 @@ export default function AppSidebar() {
             Server Features
           </Link>
 
-          {categorizedAssistants.map(category => (
-            <div key={category.name} className="py-1">
+          {categorizedAssistants.map(categoryGroup => (
+            <div key={categoryGroup.name} className="py-1">
               <Button
                 variant="ghost"
                 className="w-full justify-between text-sidebar-foreground/70 hover:text-sidebar-foreground"
-                onClick={() => toggleCategory(category.name)}
+                onClick={() => toggleCategory(categoryGroup.name)}
               >
-                {category.name}
-                {expandedCategories[category.name] ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                {categoryGroup.name}
+                {expandedCategories[categoryGroup.name] ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               </Button>
-              {expandedCategories[category.name] && category.assistants.map((assistant) => (
+              {expandedCategories[categoryGroup.name] && categoryGroup.assistants.map((assistant) => (
                 <AssistantNavItem
                   key={assistant.id}
                   assistant={assistant}
@@ -223,3 +268,4 @@ const AssistantNavItem = React.memo(function AssistantNavItem({ assistant, isAct
     </div>
   );
 });
+
