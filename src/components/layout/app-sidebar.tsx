@@ -24,11 +24,77 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import type { Assistant } from '@/types';
 
+interface AssistantNavItemProps {
+  assistant: Assistant;
+  isActive: boolean;
+  onClick: (id: string) => void;
+  onDelete: (assistant: Assistant) => void;
+}
+
+const AssistantNavItem = React.memo(function AssistantNavItem({ assistant, isActive, onClick, onDelete }: AssistantNavItemProps) {
+  const handleClick = useCallback(() => {
+    onClick(assistant.id);
+  }, [onClick, assistant.id]);
+
+  const handleDelete = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDelete(assistant);
+  }, [onDelete, assistant]);
+
+  return (
+    <div className={`group relative flex items-center rounded-lg transition-colors hover:bg-sidebar-accent ${isActive ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground hover:text-sidebar-accent-foreground'}`}>
+      <button
+        onClick={handleClick}
+        className={`flex-grow items-center px-3 py-2 text-left ${isActive ? 'font-semibold' : ''}`}
+        style={{ all: 'unset', display: 'flex', alignItems: 'center', cursor: 'pointer', width: 'calc(100% - 2.5rem)' }}
+      >
+        <Bot className="mr-2 h-4 w-4 flex-shrink-0" />
+        <span className="truncate max-w-[150px]">{assistant.name}</span>
+      </button>
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 opacity-0 group-hover:opacity-100 focus:opacity-100 text-destructive hover:bg-destructive/10"
+        onClick={handleDelete}
+        aria-label={`Delete ${assistant.name}`}
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+});
+
+interface CategoryHeaderButtonProps {
+  name: string;
+  isExpanded: boolean;
+  onToggle: (name: string) => void;
+}
+
+const CategoryHeaderButton = React.memo(function CategoryHeaderButton({ name, isExpanded, onToggle }: CategoryHeaderButtonProps) {
+  const handleToggle = useCallback(() => {
+    onToggle(name);
+  }, [name, onToggle]);
+
+  return (
+    <Button
+      variant="ghost"
+      className="w-full justify-between text-sidebar-foreground/70 hover:text-sidebar-foreground"
+      onClick={handleToggle}
+    >
+      {name}
+      {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+    </Button>
+  );
+});
+
+
 export default function AppSidebar() {
   const allAssistantsFromStore = useAssistantStore((state) => state.assistants);
   const searchQuery = useAssistantStore((state) => state.searchQuery);
   const activeAssistantId = useAssistantStore((state) => state.activeAssistantId);
-  
+
   const setActiveAssistantId = useAssistantStore((state) => state.setActiveAssistantId);
   const setSearchQuery = useAssistantStore((state) => state.setSearchQuery);
   const deleteAssistant = useAssistantStore((state) => state.deleteAssistant);
@@ -42,7 +108,9 @@ export default function AppSidebar() {
   const { toast } = useToast();
 
   useEffect(() => {
-    const currentIdFromPath = pathname.split('/assistant/')[1];
+    const pathParts = pathname.split('/assistant/');
+    const currentIdFromPath = pathParts[1]?.split('/')[0]; // More robust split
+
     if (currentIdFromPath && currentIdFromPath !== activeAssistantId && !pathname.startsWith('/server-features-demo')) {
       setActiveAssistantId(currentIdFromPath);
     }
@@ -55,34 +123,44 @@ export default function AppSidebar() {
 
   const requestDeleteAssistant = useCallback((assistant: Assistant) => {
     setAssistantToDelete(assistant);
-  }, []); 
+  }, []);
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = useCallback(() => {
     if (assistantToDelete) {
       const assistantName = assistantToDelete.name;
       const deletedAssistantId = assistantToDelete.id;
+      
+      // Important: Get the current active ID *before* updating the store
+      const currentActiveId = activeAssistantId;
+      
       deleteAssistant(deletedAssistantId);
       deleteConfig(deletedAssistantId);
+      
       toast({
         title: "Assistant Deleted",
         description: `"${assistantName}" has been deleted.`,
       });
-      
-      if (activeAssistantId === deletedAssistantId) {
-        // Need to re-fetch assistants *after* deletion to determine next active
+
+      if (currentActiveId === deletedAssistantId) {
+        // Fetch assistants *after* deletion to determine next active
+        // This needs to read from the store *after* the delete operation has been processed
+        // One way to handle this is to rely on the store's updated state in the next render cycle.
+        // Or, derive remaining assistants from the current list before deleting.
         const remainingAssistants = allAssistantsFromStore.filter(a => a.id !== deletedAssistantId);
         if (remainingAssistants.length > 0) {
-            const newActive = remainingAssistants[0]; // Or some other logic
-            setActiveAssistantId(newActive.id);
-            router.push(`/assistant/${newActive.id}`);
+          const newActive = remainingAssistants[0];
+          setActiveAssistantId(newActive.id);
+          router.push(`/assistant/${newActive.id}`);
         } else {
-            setActiveAssistantId(null);
-            router.push('/'); 
+          setActiveAssistantId(null);
+          router.push('/');
         }
       }
       setAssistantToDelete(null);
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assistantToDelete, deleteAssistant, deleteConfig, toast, activeAssistantId, router, setActiveAssistantId, allAssistantsFromStore]);
+
 
   const assistants = useMemo(() => {
     if (!searchQuery) {
@@ -102,31 +180,29 @@ export default function AppSidebar() {
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    setExpandedCategories(prev => {
-      const newExpandedState = { ...prev };
-      let madeChange = false;
+    setExpandedCategories(prevExpanded => {
+      const newExpanded = { ...prevExpanded };
+      let changed = false;
       for (const cat of categories) {
-        if (!(cat in newExpandedState)) {
-          newExpandedState[cat] = true; // Default new categories to expanded
-          madeChange = true;
+        if (!(cat in newExpanded)) {
+          newExpanded[cat] = true; 
+          changed = true;
         }
       }
-      // Optional: remove categories from expandedState if they no longer exist in the `categories` list
-      // This loop helps clean up if categories are removed (e.g. all assistants in a category deleted)
-      for (const existingCat in newExpandedState) {
-         if (!categories.includes(existingCat)) {
-             delete newExpandedState[existingCat];
-             madeChange = true;
-         }
+      for (const existingCat in newExpanded) {
+        if (!categories.includes(existingCat)) {
+          delete newExpanded[existingCat];
+          changed = true;
+        }
       }
-      return madeChange ? newExpandedState : prev;
+      return changed ? newExpanded : prevExpanded;
     });
   }, [categories]);
 
 
-  const toggleCategory = (category: string) => {
+  const toggleCategory = useCallback((category: string) => {
     setExpandedCategories(prev => ({ ...prev, [category]: !prev[category] }));
-  };
+  }, [setExpandedCategories]);
 
   const categorizedAssistants = useMemo(() => {
     return categories.map(categoryName => ({
@@ -171,14 +247,11 @@ export default function AppSidebar() {
 
           {categorizedAssistants.map(categoryGroup => (
             <div key={categoryGroup.name} className="py-1">
-              <Button
-                variant="ghost"
-                className="w-full justify-between text-sidebar-foreground/70 hover:text-sidebar-foreground"
-                onClick={() => toggleCategory(categoryGroup.name)}
-              >
-                {categoryGroup.name}
-                {expandedCategories[categoryGroup.name] ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              </Button>
+              <CategoryHeaderButton
+                name={categoryGroup.name}
+                isExpanded={!!expandedCategories[categoryGroup.name]}
+                onToggle={toggleCategory}
+              />
               {expandedCategories[categoryGroup.name] && categoryGroup.assistants.map((assistant) => (
                 <AssistantNavItem
                   key={assistant.id}
@@ -235,37 +308,3 @@ export default function AppSidebar() {
     </div>
   );
 }
-
-interface AssistantNavItemProps {
-  assistant: Assistant;
-  isActive: boolean;
-  onClick: (id: string) => void;
-  onDelete: (assistant: Assistant) => void;
-}
-
-const AssistantNavItem = React.memo(function AssistantNavItem({ assistant, isActive, onClick, onDelete }: AssistantNavItemProps) {
-  return (
-    <div className={`group relative flex items-center rounded-lg transition-colors hover:bg-sidebar-accent ${isActive ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground hover:text-sidebar-accent-foreground'}`}>
-      <button
-        onClick={() => onClick(assistant.id)}
-        className={`flex-grow items-center px-3 py-2 text-left ${isActive ? 'font-semibold' : ''}`}
-        style={{ all: 'unset', display: 'flex', alignItems: 'center', cursor: 'pointer', width: 'calc(100% - 2.5rem)' }} 
-      >
-        <Bot className="mr-2 h-4 w-4 flex-shrink-0" />
-        <span className="truncate max-w-[150px]">{assistant.name}</span>
-      </button>
-      
-      <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 opacity-0 group-hover:opacity-100 focus:opacity-100 text-destructive hover:bg-destructive/10"
-          onClick={(e) => { e.stopPropagation(); onDelete(assistant); }}
-          aria-label={`Delete ${assistant.name}`}
-        >
-        <Trash2 className="h-4 w-4" />
-      </Button>
-    </div>
-  );
-});
-
