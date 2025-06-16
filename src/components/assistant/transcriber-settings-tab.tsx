@@ -38,7 +38,7 @@ export default function TranscriberSettingsTab() {
   const [availableLanguages, setAvailableLanguages] = useState<{id: string, name: string, providers: string[]}[]>(ALL_TRANSCRIBER_LANGUAGES.filter(lang => lang.providers.includes('deepgram')));
 
   const [isRecordingLiveTest, setIsRecordingLiveTest] = useState(false);
-  const [liveTestAudioChunks, setLiveTestAudioChunks] = useState<Blob[]>([]);
+  const liveTestRecordingChunksRef = useRef<Blob[]>([]); // Changed from useState
   const liveTestMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const [liveTestTranscriptionResult, setLiveTestTranscriptionResult] = useState<string | null>(null);
   const [liveTestError, setLiveTestError] = useState<string | null>(null);
@@ -94,7 +94,7 @@ export default function TranscriberSettingsTab() {
     setLiveTestError(null);
     setLiveTestTranscriptionResult(null);
     setIsRecordingLiveTest(true);
-    setLiveTestAudioChunks([]);
+    liveTestRecordingChunksRef.current = []; // Reset for new recording
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -103,14 +103,14 @@ export default function TranscriberSettingsTab() {
 
       liveTestMediaRecorderRef.current.ondataavailable = (event) => {
         if (event.data.size > 0) {
-          setLiveTestAudioChunks((prev) => [...prev, event.data]);
+          liveTestRecordingChunksRef.current.push(event.data);
         }
       };
 
       liveTestMediaRecorderRef.current.onstop = () => {
         const recordedMimeType = liveTestMediaRecorderRef.current?.mimeType || 'audio/webm';
-        const audioBlob = new Blob(liveTestAudioChunks, { type: recordedMimeType });
-        setLiveTestAudioChunks([]);
+        const audioBlob = new Blob(liveTestRecordingChunksRef.current, { type: recordedMimeType });
+        liveTestRecordingChunksRef.current = []; // Clear after use
         stream.getTracks().forEach(track => track.stop());
 
         if (audioBlob.size === 0) {
@@ -165,8 +165,6 @@ export default function TranscriberSettingsTab() {
         setLiveTestTranscriptionResult(null);
         setLiveTestError(`Transcription Error: ${deepgramState.error}`);
       }
-      // Reset deepgramState to allow re-triggering this effect for subsequent tests
-      // This might need a more robust reset mechanism in useActionState if possible, or manual reset.
     }
   }, [deepgramState, isDeepgramPending]);
 
@@ -564,3 +562,4 @@ export default function TranscriberSettingsTab() {
     </div>
   );
 }
+
