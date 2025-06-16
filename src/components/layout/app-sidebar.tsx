@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAssistantStore } from '@/store/assistant-store';
 import { useConfigStore } from '@/store/config-store';
-import { Bot, Search, ChevronDown, ChevronRight, Trash2, PlusCircle, Server } from 'lucide-react';
+import { Bot, Search, ChevronDown, ChevronRight, Trash2, PlusCircle, Server, Code } from 'lucide-react'; // Added Code icon
 import { CreateAssistantDialog } from '@/components/assistant/create-assistant-dialog';
 import {
   AlertDialog,
@@ -49,7 +49,12 @@ const AssistantNavItem = React.memo(function AssistantNavItem({ assistant, isAct
         style={{ all: 'unset', display: 'flex', alignItems: 'center', cursor: 'pointer', width: 'calc(100% - 2.5rem)' }} // Ensure button takes up space
       >
         <Bot className="mr-2 h-4 w-4 flex-shrink-0" />
-        <span className="truncate max-w-[150px]">{assistant.name}</span>
+        <div className="flex flex-col max-w-[150px] truncate">
+          <span className="truncate">{assistant.name}</span>
+          <span className="text-xs text-sidebar-foreground/60 truncate flex items-center">
+            <Code className="mr-1 h-3 w-3 flex-shrink-0" /> {assistant.id}
+          </span>
+        </div>
       </button>
 
       <Button
@@ -114,16 +119,6 @@ export default function AppSidebar() {
       if (useAssistantStore.getState().activeAssistantId !== currentIdFromPath) {
         setActiveAssistantId(currentIdFromPath);
       }
-    } else {
-      // If not on an assistant page (and not server-features-demo), 
-      // and an assistant is active, consider deactivating.
-      // This behavior might need adjustment based on UX requirements for other non-assistant pages.
-      if (useAssistantStore.getState().activeAssistantId !== null && 
-          !pathname.startsWith('/server-features-demo') && 
-          !pathname.startsWith('/assistant/')) {
-        // setActiveAssistantId(null); // Commented out: this could be too aggressive.
-                                    // `src/app/page.tsx` handles initial routing logic.
-      }
     }
   }, [pathname, setActiveAssistantId]);
 
@@ -141,8 +136,6 @@ export default function AppSidebar() {
       const assistantName = assistantToDelete.name;
       const deletedAssistantId = assistantToDelete.id;
       
-      const currentActiveIdInStore = useAssistantStore.getState().activeAssistantId; 
-      
       deleteAssistant(deletedAssistantId);
       deleteConfig(deletedAssistantId);
       
@@ -151,15 +144,16 @@ export default function AppSidebar() {
         description: `"${assistantName}" has been deleted.`,
       });
 
-      if (currentActiveIdInStore === deletedAssistantId) {
+      const currentActiveId = useAssistantStore.getState().activeAssistantId;
+      if (currentActiveId === deletedAssistantId) {
         const remainingAssistants = useAssistantStore.getState().assistants;
         if (remainingAssistants.length > 0) {
           const newActive = remainingAssistants[0];
-          setActiveAssistantId(newActive.id); // Update store
-          router.push(`/assistant/${newActive.id}`); // Navigate
+          setActiveAssistantId(newActive.id); 
+          router.push(`/assistant/${newActive.id}`); 
         } else {
-          setActiveAssistantId(null); // Update store
-          router.push('/'); // Navigate
+          setActiveAssistantId(null); 
+          router.push('/'); 
         }
       }
       setAssistantToDelete(null);
@@ -189,14 +183,10 @@ export default function AppSidebar() {
       const newExpectedState: Record<string, boolean> = {};
       let hasContentChanged = false;
 
-      // Build the new state based on current categories,
-      // preserving existing true/false states for categories that still exist,
-      // and defaulting new categories to true.
       for (const cat of categories) {
         newExpectedState[cat] = currentExpanded.hasOwnProperty(cat) ? currentExpanded[cat] : true;
       }
 
-      // Compare newExpectedState with currentExpanded content-wise
       const currentKeys = Object.keys(currentExpanded);
       const newKeys = Object.keys(newExpectedState);
 
@@ -204,15 +194,12 @@ export default function AppSidebar() {
         hasContentChanged = true;
       } else {
         for (const key of newKeys) {
-          // Check if key exists in current (it should if lengths are same and no keys removed)
-          // and if its value is different.
           if (!currentExpanded.hasOwnProperty(key) || currentExpanded[key] !== newExpectedState[key]) {
             hasContentChanged = true;
             break;
           }
         }
       }
-      // Only return a new object if the content has actually changed.
       return hasContentChanged ? newExpectedState : currentExpanded;
     });
   }, [categories]);
