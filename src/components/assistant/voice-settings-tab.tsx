@@ -24,6 +24,7 @@ const ELEVENLABS_VOICES = [
   { id: '29vD33N1CtxCmqQRPOHJ', name: 'Drew (M, American, Conversational)' },
   { id: '2EiwWnXFnvU5JabPnv8n', name: 'Clyde (M, American, Deep)' },
   { id: '5Q0t7uMcjvnagumLfvZi', name: 'Paul (M, American, Authoritative)' },
+  { id: '6JsmTroalVewG1gA6Jmw', name: 'Sia - Friendly Conversational Voice' },
   { id: 'AZnzlk1XvdvUeBnXmlld', name: 'Domi (F, American, Strong)' },
   { id: 'CYw3kZ02Hs0563khs1Fj', name: 'Dave (M, British, Conversational)' },
   { id: 'D38z5RcWu1voky8WS1ja', name: 'Fin (M, British, Deep)' },

@@ -14,12 +14,12 @@ export const DEFAULT_VOICE_CONFIG: VoiceConfig = {
   language: 'en-US',
   backgroundSound: 'default',
   backgroundSoundUrl: '',
-  backgroundVolume: 0.5, 
+  backgroundVolume: 0.5,
   loopBackgroundSound: false,
   inputMinCharacters: 20,
   speakingRate: 1.0,
   pitch: 1.0,
-  masterVolume: 1.0, 
+  masterVolume: 1.0,
   punctuationBoundaries: ['.', '?', '!'],
   customPunctuation: [],
   pauseDurations: { comma: 150, period: 300, semicolon: 250 },
@@ -33,14 +33,14 @@ export const DEFAULT_VOICE_CONFIG: VoiceConfig = {
 
 export const DEFAULT_TRANSCRIBER_CONFIG: TranscriberConfig = {
   provider: 'deepgram',
-  model: 'nova-2', 
+  model: 'nova-2',
   language: 'en-US',
   autoDetectLanguage: false,
   smartFormatting: {
     enabled: true,
     punctuation: true,
     capitalization: true,
-    speakerLabels: false, 
+    speakerLabels: false,
     fillerWordRemoval: false,
     profanityFilter: false,
   },
@@ -51,8 +51,8 @@ export const DEFAULT_TRANSCRIBER_CONFIG: TranscriberConfig = {
     echoCancellation: false,
   },
   qualityControl: {
-    confidenceThreshold: 0.85, 
-    minWordLength: 0, 
+    confidenceThreshold: 0.85,
+    minWordLength: 0,
     customVocabulary: [],
     filterLowConfidence: false,
   },
@@ -110,7 +110,7 @@ export const INITIAL_ASSISTANT_CONFIGS: Record<string, AssistantConfig> = {
     },
     transcriber: {
         ...DEFAULT_TRANSCRIBER_CONFIG,
-        model: 'nova-2-general', 
+        model: 'nova-2-general',
     }
   },
   'sarah-1': {
@@ -127,8 +127,8 @@ export const INITIAL_ASSISTANT_CONFIGS: Record<string, AssistantConfig> = {
     voice: {
       ...DEFAULT_VOICE_CONFIG,
       voiceId: '21m00Tcm4TlvDq8ikWAM', // Rachel's ID (already default)
-      speakingRate: 1.1, 
-      pitch: 1.05, 
+      speakingRate: 1.1,
+      pitch: 1.05,
       emotion: 'excited',
       tone: 'creative',
     },
@@ -141,3 +141,4 @@ export const INITIAL_ASSISTANT_CONFIGS: Record<string, AssistantConfig> = {
     }
   },
 };
+
