@@ -14,7 +14,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Bot, User, Mic, Send, Loader2, Paperclip, Download, Library } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Bot, User, Mic, Send, Loader2, Paperclip, Download, Library, StopCircle, AlertTriangle } from 'lucide-react';
 import type { AssistantConfig, TestChatMessage } from '@/types';
 import { useConfigStore } from '@/store/config-store';
 import { testAssistantChat } from '@/ai/flows/test-assistant-chat-flow';
@@ -35,6 +36,10 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
   const [currentMessage, setCurrentMessage] = useState('');
   const [chatHistory, setChatHistory] = useState<TestChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const [hasMicPermission, setHasMicPermission] = useState<boolean | null>(null); // null = not yet determined
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -43,7 +48,6 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
       const config = getConfig(assistantId);
       if (config) {
         setAssistantConfig(config);
-        // Start with the assistant's first message if the dialog is opened and history is empty
         if (open && chatHistory.length === 0) {
           setChatHistory([{ id: nanoid(), role: 'assistant', content: config.firstMessage }]);
         }
@@ -52,30 +56,119 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
         onOpenChange(false);
       }
     }
-    // Reset history if dialog is closed or assistant changes
     if (!open || (assistantConfig && assistantId !== assistantConfig.id)) {
-        setChatHistory([]);
-        setCurrentMessage('');
+      setChatHistory([]);
+      setCurrentMessage('');
+      setIsRecording(false);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        mediaRecorderRef.current.stop();
+      }
+      setHasMicPermission(null); // Reset permission status on dialog close/change
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assistantId, open, getConfig, onOpenChange]); // chatHistory removed to avoid loop with first message
+  }, [assistantId, open, getConfig, onOpenChange]);
 
   useEffect(() => {
-    // Auto-scroll to bottom when chat history changes
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
     }
   }, [chatHistory]);
 
-  const handleSendMessage = useCallback(async (messageContent: string) => {
+  const requestMicPermission = async () => {
+    if (hasMicPermission === true) return true;
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      setHasMicPermission(true);
+      toast({ title: "Microphone Access", description: "Microphone permission granted." });
+      return true;
+    } catch (error) {
+      console.error('Error accessing microphone:', error);
+      setHasMicPermission(false);
+      toast({
+        variant: 'destructive',
+        title: 'Microphone Access Denied',
+        description: 'Please enable microphone permissions in your browser settings.',
+      });
+      return false;
+    }
+  };
+
+  const startRecording = async () => {
+    const permissionGranted = await requestMicPermission();
+    if (!permissionGranted) return;
+
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorderRef.current = new MediaRecorder(stream);
+        mediaRecorderRef.current.ondataavailable = (event) => {
+          setAudioChunks((prev) => [...prev, event.data]);
+        };
+        mediaRecorderRef.current.onstop = async () => {
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          // For now, simulate transcription and sending
+          setAudioChunks([]); // Clear chunks for next recording
+          
+          // Simulate transcription process
+          setIsLoading(true);
+          const thinkingMsgId = nanoid();
+          setChatHistory(prev => [...prev, {id: thinkingMsgId, role: 'assistant', content: 'Transcribing your voice note...', isThinking: true}]);
+          
+          // Simulate delay for transcription
+          await new Promise(resolve => setTimeout(resolve, 1500));
+
+          // Remove "Transcribing..." message
+          setChatHistory(prev => prev.filter(msg => msg.id !== thinkingMsgId));
+          
+          // Send simulated transcription to the chat flow
+          // In a real app, you'd send audioBlob for transcription and then send the text
+          handleSendMessage("Simulated transcription of your voice note.", true); 
+          setIsLoading(false);
+
+          // Stop all tracks on the stream to release the microphone
+          stream.getTracks().forEach(track => track.stop());
+        };
+        mediaRecorderRef.current.start();
+        setIsRecording(true);
+        setAudioChunks([]);
+        toast({ title: "Recording Started", description: "Speak now..." });
+      } catch (err) {
+        console.error('Error starting recording:', err);
+        toast({ title: "Recording Error", description: "Could not start recording.", variant: "destructive" });
+        setHasMicPermission(false); // Re-evaluate permission if getUserMedia fails
+      }
+    } else {
+      toast({ title: "Unsupported", description: "Your browser doesn't support audio recording.", variant: "destructive" });
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      toast({ title: "Recording Stopped" });
+      // The onstop handler will process the audio
+    }
+  };
+
+  const handleVoiceInputClick = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
+
+  const handleSendMessage = useCallback(async (messageContent: string, isVoiceNoteSimulated = false) => {
     if (!messageContent.trim() || !assistantConfig) return;
 
     const userMessage: TestChatMessage = { id: nanoid(), role: 'user', content: messageContent.trim() };
     setChatHistory(prev => [...prev, userMessage]);
-    setCurrentMessage('');
+    if (!isVoiceNoteSimulated) {
+        setCurrentMessage('');
+    }
     setIsLoading(true);
 
-    // Add a thinking indicator for the assistant
     const thinkingMessageId = nanoid();
     setChatHistory(prev => [...prev, { id: thinkingMessageId, role: 'assistant', content: '...', isThinking: true }]);
 
@@ -83,7 +176,7 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
       const response = await testAssistantChat({
         userInput: userMessage.content,
         assistantConfig: assistantConfig,
-        chatHistory: [...chatHistory, userMessage], // Send history up to the user's message
+        chatHistory: chatHistory.filter(msg => !msg.isThinking), // Send history without "thinking" bubbles
       });
       
       setChatHistory(prev => prev.map(msg => 
@@ -93,7 +186,7 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
     } catch (error) {
       console.error("Error calling testAssistantChat flow:", error);
       toast({ title: "AI Error", description: "Failed to get a response from the assistant.", variant: "destructive" });
-      setChatHistory(prev => prev.filter(msg => msg.id !== thinkingMessageId)); // Remove thinking bubble
+      setChatHistory(prev => prev.filter(msg => msg.id !== thinkingMessageId));
       setChatHistory(prev => [...prev, {id: nanoid(), role: 'assistant', content: "Sorry, I encountered an error."}]);
     } finally {
       setIsLoading(false);
@@ -104,18 +197,6 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
   const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     handleSendMessage(currentMessage);
-  };
-
-  const handleVoiceInputClick = () => {
-    // Placeholder for voice input
-    // For now, let's simulate it by sending the current text input (if any) or a canned phrase
-    if (currentMessage.trim()) {
-        handleSendMessage(currentMessage);
-    } else {
-        toast({ title: "Voice Input (Simulated)", description: "Voice input is not fully implemented. Type your message." });
-        // Or, you could send a canned phrase:
-        // handleSendMessage("Tell me a joke."); 
-    }
   };
 
   if (!open) return null;
@@ -131,6 +212,15 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
         </DialogHeader>
 
         <ScrollArea className="flex-1 p-6" ref={scrollAreaRef}>
+          {hasMicPermission === false && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Microphone Access Denied</AlertTitle>
+              <AlertDescription>
+                To use voice input, please enable microphone permissions in your browser settings and refresh.
+              </AlertDescription>
+            </Alert>
+          )}
           <div className="space-y-4">
             {chatHistory.map((msg) => (
               <div
@@ -161,32 +251,32 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
                 )}
               </div>
             ))}
-            {isLoading && chatHistory.some(msg => msg.isThinking) && ( // Redundant check, thinking message handles this
-              <div className="flex items-end gap-2 justify-start">
-                <Bot className="h-7 w-7 text-primary animate-pulse flex-shrink-0" />
-                <div className="max-w-[70%] p-3 rounded-xl shadow-md bg-muted text-muted-foreground italic rounded-bl-none">
-                  Assistant is typing...
-                </div>
-              </div>
-            )}
+            {/* The thinking message is now part of chatHistory directly */}
           </div>
         </ScrollArea>
 
         <div className="p-4 border-t bg-background">
-          {/* Placeholder for message actions like download/save */}
           {chatHistory.length > 0 && chatHistory[chatHistory.length -1].role === 'assistant' && !chatHistory[chatHistory.length -1].isThinking && (
             <div className="flex gap-2 mb-2 justify-end">
-                <Button variant="outline" size="sm" onClick={() => toast({title: "Simulated", description: "Saved to library (simulated)."})}>
+                <Button type="button" variant="outline" size="sm" onClick={() => toast({title: "Simulated", description: "Saved to library (simulated)."})}>
                     <Library className="mr-2 h-4 w-4" /> Save to Library
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => toast({title: "Simulated", description: "Downloaded PDF (simulated)."})}>
+                <Button type="button" variant="outline" size="sm" onClick={() => toast({title: "Simulated", description: "Downloaded PDF (simulated)."})}>
                     <Download className="mr-2 h-4 w-4" /> Download PDF
                 </Button>
             </div>
           )}
           <form onSubmit={handleFormSubmit} className="flex items-center gap-2">
-            <Button type="button" variant="ghost" size="icon" className="bg-pink-500 hover:bg-pink-600 text-white rounded-full h-10 w-10" onClick={handleVoiceInputClick} aria-label="Voice input">
-              <Mic className="h-5 w-5" />
+            <Button 
+              type="button" 
+              variant="ghost" 
+              size="icon" 
+              className={`${isRecording ? 'bg-red-500 hover:bg-red-600' : 'bg-pink-500 hover:bg-pink-600'} text-white rounded-full h-10 w-10`} 
+              onClick={handleVoiceInputClick} 
+              aria-label={isRecording ? "Stop recording" : "Start voice input"}
+              disabled={isLoading || hasMicPermission === false} // Disable if loading or no mic permission
+            >
+              {isRecording ? <StopCircle className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
             </Button>
             <Input
               type="text"
@@ -194,10 +284,10 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
               value={currentMessage}
               onChange={(e) => setCurrentMessage(e.target.value)}
               className="flex-1 h-10"
-              disabled={isLoading}
+              disabled={isLoading || isRecording} // Disable if loading or recording
             />
-            <Button type="submit" size="icon" className="h-10 w-10" disabled={isLoading || !currentMessage.trim()}>
-              {isLoading && !chatHistory.some(msg => msg.isThinking) ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+            <Button type="submit" size="icon" className="h-10 w-10" disabled={isLoading || isRecording || !currentMessage.trim()}>
+              {isLoading && !isRecording && !chatHistory.some(msg => msg.isThinking) ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
             </Button>
              <Button type="button" variant="outline" size="icon" className="h-10 w-10" onClick={() => toast({title: "Simulated", description: "File attachment (simulated)."})}>
               <Paperclip className="h-5 w-5" />
@@ -213,3 +303,4 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
     </Dialog>
   );
 }
+
