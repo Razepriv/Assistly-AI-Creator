@@ -10,19 +10,25 @@ const DeepgramRequestSchema = z.object({
   language: z.string().optional().default('en-US'),
   punctuate: z.boolean().optional().default(true),
   smart_format: z.boolean().optional().default(true),
-  // Add other Deepgram parameters as needed based on TranscriberConfig
 });
 
 export async function transcribeDeepgramAudio(
   prevState: DeepgramTranscriptionState,
   formData: FormData
 ): Promise<DeepgramTranscriptionState> {
+  console.log('[Deepgram Action] Received FormData keys:', Array.from(formData.keys()));
   const audioDataUri = formData.get('audioDataUri') as string;
   const model = formData.get('model') as string || 'nova-2';
   const language = formData.get('language') as string || 'en-US';
-  const punctuate = formData.get('punctuate') === 'true'; // FormData values are strings
+  const punctuate = formData.get('punctuate') === 'true'; 
   const smart_format = formData.get('smart_format') === 'true';
 
+  console.log('[Deepgram Action] Parsed FormData values:');
+  console.log('[Deepgram Action] - audioDataUri (first 100 chars):', audioDataUri?.substring(0, 100));
+  console.log('[Deepgram Action] - model:', model);
+  console.log('[Deepgram Action] - language:', language);
+  console.log('[Deepgram Action] - punctuate:', punctuate);
+  console.log('[Deepgram Action] - smart_format:', smart_format);
 
   const validatedFields = DeepgramRequestSchema.safeParse({
     audioDataUri,
@@ -33,37 +39,63 @@ export async function transcribeDeepgramAudio(
   });
 
   if (!validatedFields.success) {
-    console.error('Deepgram Action Validation Error:', validatedFields.error.flatten().fieldErrors);
+    console.error('[Deepgram Action] Validation Error:', validatedFields.error.flatten().fieldErrors);
     return {
-      error: 'Invalid input: ' + (validatedFields.error.flatten().fieldErrors.audioDataUri?.join(', ') || 'Unknown validation error'),
+      error: 'Invalid input: ' + (validatedFields.error.flatten().fieldErrors.audioDataUri?.join(', ') || JSON.stringify(validatedFields.error.flatten().fieldErrors)),
       success: false,
     };
   }
+  
+  console.log('[Deepgram Action] Validated fields:', validatedFields.data);
 
   const apiKey = process.env.DEEPGRAM_API_KEY;
   if (!apiKey) {
-    console.error('Deepgram API key is not configured.');
+    console.error('[Deepgram Action] Deepgram API key is not configured.');
     return { error: 'Deepgram API key is not configured on the server.', success: false };
   }
 
   try {
-    // Extract base64 data and mimeType from data URI
     const parts = validatedFields.data.audioDataUri.split(',');
-    if (parts.length !== 2) throw new Error('Invalid audio data URI format');
-    const mimeTypePart = parts[0].split(':')[1].split(';')[0];
+    if (parts.length !== 2) {
+        console.error('[Deepgram Action] Invalid audio data URI format. Expected 2 parts, got:', parts.length);
+        throw new Error('Invalid audio data URI format. Ensure it starts with data:<mimetype>;base64,<encoded_data>');
+    }
+    const mimeTypePartHeader = parts[0].split(':')[1]; // e.g., "audio/webm;codecs=opus;base64" or "audio/webm;base64"
+    const mimeTypePart = mimeTypePartHeader.split(';')[0]; // e.g., "audio/webm"
     const base64Data = parts[1];
+
+    console.log('[Deepgram Action] Extracted MimeType:', mimeTypePart);
+    if (!mimeTypePart || !base64Data) {
+        console.error('[Deepgram Action] Failed to extract MimeType or Base64 data from URI.');
+        throw new Error('Failed to parse audio data URI. MimeType or data missing.');
+    }
+
     const audioBuffer = Buffer.from(base64Data, 'base64');
+    console.log('[Deepgram Action] Audio Buffer Length:', audioBuffer.length);
 
-    const deepgramApiUrl = `https://api.deepgram.com/v1/listen?model=${validatedFields.data.model}&language=${validatedFields.data.language}&punctuate=${validatedFields.data.punctuate}&smart_format=${validatedFields.data.smart_format}`;
+    if (audioBuffer.length === 0) {
+        console.error('[Deepgram Action] Audio buffer is empty after base64 decoding.');
+        return { error: 'Audio data is empty after processing. Recording might be too short or silent.', success: false };
+    }
+
+    const queryParams = new URLSearchParams({
+        model: validatedFields.data.model,
+        language: validatedFields.data.language,
+        punctuate: String(validatedFields.data.punctuate),
+        smart_format: String(validatedFields.data.smart_format),
+        // You can add other supported Deepgram features here as query params
+        // For example: features: 'diarize', utterances: 'true', etc.
+        // Check Deepgram docs for /v1/listen endpoint options.
+    });
+    const deepgramApiUrl = `https://api.deepgram.com/v1/listen?${queryParams.toString()}`;
     
-    console.log('[Deepgram Action] Calling API:', deepgramApiUrl);
-    // console.log('[Deepgram Action] Audio Buffer Length:', audioBuffer.length); // Sensitive, log length only
-
+    console.log('[Deepgram Action] Calling API URL:', deepgramApiUrl);
+    
     const response = await fetch(deepgramApiUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Token ${apiKey}`,
-        'Content-Type': mimeTypePart,
+        'Content-Type': mimeTypePart, 
         'Accept': 'application/json',
       },
       body: audioBuffer,
@@ -72,11 +104,13 @@ export async function transcribeDeepgramAudio(
     const responseData = await response.json();
 
     if (!response.ok) {
-      console.error('[Deepgram Action] API Error Status:', response.status);
-      console.error('[Deepgram Action] API Error Response:', responseData);
-      const errorMessage = responseData.err_msg || responseData.reason || 'Unknown error from Deepgram API';
-      return { error: `Deepgram API Error: ${response.status} - ${errorMessage}`, success: false };
+      console.error(`[Deepgram Action] API Error Status: ${response.status} ${response.statusText}`);
+      console.error('[Deepgram Action] API Error Response Body:', JSON.stringify(responseData, null, 2));
+      const errorMessage = responseData.err_msg || responseData.reason || responseData.error || JSON.stringify(responseData) || 'Unknown error from Deepgram API';
+      return { error: `Deepgram API Error (${response.status}): ${errorMessage}`, success: false };
     }
+
+    console.log('[Deepgram Action] API Success Response:', JSON.stringify(responseData, null, 2));
 
     if (responseData.results && responseData.results.channels && responseData.results.channels.length > 0 &&
         responseData.results.channels[0].alternatives && responseData.results.channels[0].alternatives.length > 0) {
@@ -86,14 +120,20 @@ export async function transcribeDeepgramAudio(
         return { transcribedText: transcript, success: true };
       } else {
         console.log('[Deepgram Action] Transcription successful but received empty transcript.');
-        return { transcribedText: "", success: true }; // Success but empty
+        return { transcribedText: "", success: true }; 
       }
     } else {
-      console.warn('[Deepgram Action] Transcription response did not contain expected transcript structure:', responseData);
-      return { error: 'Transcription failed: No transcript in response.', success: false };
+      console.warn('[Deepgram Action] Transcription response did not contain expected transcript structure. Full response:', JSON.stringify(responseData, null, 2));
+      return { error: 'Transcription failed: No transcript in response structure.', success: false };
     }
   } catch (error) {
-    console.error('[Deepgram Action] Failed to transcribe audio:', error);
-    return { error: 'Failed to connect to Deepgram API. ' + (error instanceof Error ? error.message : String(error)), success: false };
+    console.error('[Deepgram Action] General error during transcription:', error);
+    let errorMessage = 'Failed to process audio transcription. ';
+    if (error instanceof Error) {
+        errorMessage += error.message;
+    } else {
+        errorMessage += String(error);
+    }
+    return { error: errorMessage, success: false };
   }
 }
