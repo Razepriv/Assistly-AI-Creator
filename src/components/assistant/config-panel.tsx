@@ -272,7 +272,7 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
 
   return (
     <FormProvider {...methods}>
-      <div className="h-full flex flex-col"> {/* Changed from form to div */}
+      <div className="h-full flex flex-col"> {/* Ensure no onSubmit prop here */}
         <Tabs defaultValue="model" className="flex-1 flex flex-col overflow-hidden">
           <div className="px-1">
             <TabsList className="grid w-full grid-cols-3 md:grid-cols-6 gap-2 h-auto p-1 bg-muted rounded-lg">
