@@ -42,10 +42,19 @@ export interface VoiceConfig {
     bitrate: number; // e.g., 128, 192, 256 kbps
     sampleRate: number; // e.g., 24000, 44100, 48000 Hz
   };
+  providerSpecific?: { // For provider-specific settings not fitting general model
+    elevenlabs?: {
+      model_id?: string;
+      stability?: number; // 0-1
+      similarity_boost?: number; // 0-1
+      style?: number; // 0-1 (for style_exaggeration)
+      use_speaker_boost?: boolean;
+    }
+  }
 }
 
 export interface TranscriberConfig {
-  provider: 'deepgram' | 'openai' | 'assemblyai'; // Example providers
+  provider: 'deepgram' | 'openai' | 'assemblyai' | 'mock-openai'; // Added mock-openai
   model: string; // e.g., 'nova-2', 'whisper-1'
   language: string; // e.g., 'en-US', 'auto'
   autoDetectLanguage: boolean;
@@ -131,7 +140,7 @@ export interface TestChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  isThinking?: boolean; 
+  isThinking?: boolean;
   isTranscribing?: boolean;
   isSynthesizing?: boolean;
   audioDataUri?: string; // To store user's recorded audio if needed for replay

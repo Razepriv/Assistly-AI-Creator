@@ -1,7 +1,7 @@
 
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect, useRef, useCallback, useActionState, startTransition } from 'react';
 import { useFormContext, Controller } from 'react-hook-form';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -10,32 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Mic, Languages, Settings, SlidersHorizontal, CheckCircle, Filter, AlertCircle } from 'lucide-react';
-import type { AssistantConfig } from '@/types'; // Ensure TranscriberConfig is part of AssistantConfig
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Mic, Languages, Settings, SlidersHorizontal, CheckCircle, Filter, AlertCircle, UploadCloud, FileText, X, Play, StopCircle, Loader2, ListChecks, PackageOpen } from 'lucide-react';
+import type { AssistantConfig, TranscriberConfig, DeepgramTranscriptionState } from '@/types';
 import { useToast } from "@/hooks/use-toast";
-
-// Mock data - replace with actual API calls or constants later
-const TRANSCRIBER_PROVIDERS = [
-    { id: 'deepgram', name: 'Deepgram' },
-    // { id: 'openai', name: 'OpenAI Whisper' },
-    // { id: 'assemblyai', name: 'AssemblyAI' },
-];
-
-const DEEPGRAM_MODELS = [
-    { id: 'nova-2', name: 'Nova-2 (Latest, General)' },
-    { id: 'nova-2-general', name: 'Nova-2 General' },
-    { id: 'nova-2-meeting', name: 'Nova-2 Meeting Optimized' },
-    { id: 'nova-2-phonecall', name: 'Nova-2 Phone Call Optimized' },
-    { id: 'base', name: 'Base (Legacy)' },
-];
-
-const TRANSCRIBER_LANGUAGES = [
-  { id: 'en-US', name: 'English (US)' },
-  { id: 'en-GB', name: 'English (UK)' },
-  { id: 'es', name: 'Español' },
-  { id: 'fr', name: 'Français' },
-  { id: 'auto', name: 'Auto-detect' },
-];
+import { TRANSCRIBER_PROVIDERS, DEEPGRAM_MODELS, MOCK_OPENAI_WHISPER_MODELS, ALL_TRANSCRIBER_LANGUAGES } from '@/lib/constants';
+import { transcribeDeepgramAudio } from '@/app/actions/deepgram-actions';
+import { Textarea } from '../ui/textarea';
 
 const DENOISING_INTENSITIES = [
     { id: 'light', name: 'Light' },
@@ -43,21 +24,169 @@ const DENOISING_INTENSITIES = [
     { id: 'strong', name: 'Strong' },
 ];
 
-
 export default function TranscriberSettingsTab() {
-  const { control, watch, formState: { errors } } = useFormContext<AssistantConfig>();
+  const { control, watch, setValue, formState: { errors } } = useFormContext<AssistantConfig>();
   const { toast } = useToast();
 
-  const transcriberConfig = watch('transcriber'); // Watch the whole transcriber object
+  const transcriberProvider = watch('transcriber.provider');
   const smartFormattingEnabled = watch('transcriber.smartFormatting.enabled');
   const backgroundDenoisingEnabled = watch('transcriber.audioProcessing.backgroundDenoising');
+  const customVocabulary = watch('transcriber.qualityControl.customVocabulary', []);
 
-  const handleTestTranscription = () => {
-    // Placeholder for actual transcription test functionality
+  const [customVocabInput, setCustomVocabInput] = useState('');
+  const [availableModels, setAvailableModels] = useState<{id: string, name: string}[]>(DEEPGRAM_MODELS);
+  const [availableLanguages, setAvailableLanguages] = useState<{id: string, name: string, providers: string[]}[]>(ALL_TRANSCRIBER_LANGUAGES.filter(lang => lang.providers.includes('deepgram')));
+
+  const [isRecordingLiveTest, setIsRecordingLiveTest] = useState(false);
+  const [liveTestAudioChunks, setLiveTestAudioChunks] = useState<Blob[]>([]);
+  const liveTestMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const [liveTestTranscriptionResult, setLiveTestTranscriptionResult] = useState<string | null>(null);
+  const [liveTestError, setLiveTestError] = useState<string | null>(null);
+  
+  const initialDeepgramState: DeepgramTranscriptionState = { success: false };
+  const [deepgramState, deepgramFormAction, isDeepgramPending] = useActionState(transcribeDeepgramAudio, initialDeepgramState);
+
+  const [batchFiles, setBatchFiles] = useState<File[]>([]);
+
+
+  useEffect(() => {
+    if (transcriberProvider === 'deepgram') {
+      setAvailableModels(DEEPGRAM_MODELS);
+      setAvailableLanguages(ALL_TRANSCRIBER_LANGUAGES.filter(lang => lang.providers.includes('deepgram')));
+    } else if (transcriberProvider === 'mock-openai') {
+      setAvailableModels(MOCK_OPENAI_WHISPER_MODELS);
+      setAvailableLanguages(ALL_TRANSCRIBER_LANGUAGES.filter(lang => lang.providers.includes('mock-openai')));
+    } else {
+      setAvailableModels([]);
+      setAvailableLanguages([]);
+    }
+    // Optionally reset model and language if current selection is not in new list
+    // This part can be tricky and depends on desired UX. For now, let user manually re-select.
+  }, [transcriberProvider]);
+
+  const handleAddCustomVocab = () => {
+    if (customVocabInput.trim() && !customVocabulary.includes(customVocabInput.trim())) {
+      setValue('transcriber.qualityControl.customVocabulary', [...customVocabulary, customVocabInput.trim()], { shouldValidate: true, shouldDirty: true });
+      setCustomVocabInput('');
+    }
+  };
+
+  const handleRemoveCustomVocab = (termToRemove: string) => {
+    setValue('transcriber.qualityControl.customVocabulary', customVocabulary.filter(term => term !== termToRemove), { shouldValidate: true, shouldDirty: true });
+  };
+
+  // Live Test Recording Logic
+  const requestMicPermissionForLiveTest = async () => {
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      return true;
+    } catch (error) {
+      console.error('Error accessing microphone for live test:', error);
+      setLiveTestError('Microphone access denied. Please enable permissions.');
+      return false;
+    }
+  };
+
+  const startLiveTestRecording = async () => {
+    const permissionGranted = await requestMicPermissionForLiveTest();
+    if (!permissionGranted) return;
+
+    setLiveTestError(null);
+    setLiveTestTranscriptionResult(null);
+    setIsRecordingLiveTest(true);
+    setLiveTestAudioChunks([]);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const options = { mimeType: MediaRecorder.isTypeSupported('audio/wav') ? 'audio/wav' : 'audio/webm' };
+      liveTestMediaRecorderRef.current = new MediaRecorder(stream, options);
+
+      liveTestMediaRecorderRef.current.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          setLiveTestAudioChunks((prev) => [...prev, event.data]);
+        }
+      };
+
+      liveTestMediaRecorderRef.current.onstop = () => {
+        const recordedMimeType = liveTestMediaRecorderRef.current?.mimeType || 'audio/webm';
+        const audioBlob = new Blob(liveTestAudioChunks, { type: recordedMimeType });
+        setLiveTestAudioChunks([]);
+        stream.getTracks().forEach(track => track.stop());
+
+        if (audioBlob.size === 0) {
+          setLiveTestError("No audio recorded for live test.");
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const audioDataUri = reader.result as string;
+          const formData = new FormData();
+          formData.append('audioDataUri', audioDataUri);
+          const currentTranscriberConfig = watch('transcriber');
+          formData.append('model', currentTranscriberConfig.model);
+          formData.append('language', currentTranscriberConfig.language);
+          formData.append('punctuate', String(currentTranscriberConfig.smartFormatting.punctuation));
+          formData.append('smart_format', String(currentTranscriberConfig.smartFormatting.enabled));
+          if (currentTranscriberConfig.provider === 'deepgram' && currentTranscriberConfig.qualityControl.customVocabulary.length > 0) {
+            formData.append('keywords', currentTranscriberConfig.qualityControl.customVocabulary.join(':'));
+          }
+          
+          setLiveTestTranscriptionResult("Transcribing...");
+          startTransition(() => {
+            deepgramFormAction(formData);
+          });
+        };
+        reader.readAsDataURL(audioBlob);
+      };
+      liveTestMediaRecorderRef.current.start();
+      toast({ title: "Live Test Recording Started" });
+    } catch (err) {
+      console.error('Error starting live test recording:', err);
+      setLiveTestError("Could not start recording.");
+      setIsRecordingLiveTest(false);
+    }
+  };
+
+  const stopLiveTestRecording = () => {
+    if (liveTestMediaRecorderRef.current && liveTestMediaRecorderRef.current.state === "recording") {
+      liveTestMediaRecorderRef.current.stop();
+      setIsRecordingLiveTest(false);
+      toast({ title: "Live Test Recording Stopped", description: "Processing..."});
+    }
+  };
+
+  useEffect(() => {
+    if (!isDeepgramPending && deepgramState) {
+      if (deepgramState.success && deepgramState.transcribedText !== undefined) {
+        setLiveTestTranscriptionResult(deepgramState.transcribedText || "[Empty Transcription]");
+        setLiveTestError(null);
+      } else if (deepgramState.error) {
+        setLiveTestTranscriptionResult(null);
+        setLiveTestError(`Transcription Error: ${deepgramState.error}`);
+      }
+      // Reset deepgramState to allow re-triggering this effect for subsequent tests
+      // This might need a more robust reset mechanism in useActionState if possible, or manual reset.
+    }
+  }, [deepgramState, isDeepgramPending]);
+
+
+  const handleBatchFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files) {
+      setBatchFiles(Array.from(event.target.files));
+    }
+  };
+
+  const handleStartBatchTranscription = () => {
+    if (batchFiles.length === 0) {
+      toast({ title: "No Files Selected", description: "Please select audio files for batch transcription.", variant: "destructive" });
+      return;
+    }
     toast({
-      title: "Test Transcription",
-      description: "Transcription testing functionality is not yet implemented.",
+      title: "Batch Transcription",
+      description: `Simulating batch transcription for ${batchFiles.length} file(s). This feature is not fully implemented.`,
     });
+    // Placeholder for actual batch processing logic
   };
 
   return (
@@ -66,7 +195,7 @@ export default function TranscriberSettingsTab() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><Mic className="mr-2 h-5 w-5 text-primary" /> Provider & Model</CardTitle>
-          <CardDescription>Select your speech-to-text provider and model.</CardDescription>
+          <CardDescription>Select your speech-to-text provider and model. Model and language options will update based on provider.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -76,7 +205,20 @@ export default function TranscriberSettingsTab() {
                 name="transcriber.provider"
                 control={control}
                 render={({ field }) => (
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select 
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      // Reset model and language or set to first available for new provider
+                      if (value === 'deepgram') {
+                        setValue('transcriber.model', DEEPGRAM_MODELS[0].id, {shouldValidate: true});
+                        setValue('transcriber.language', ALL_TRANSCRIBER_LANGUAGES.find(l=>l.providers.includes('deepgram'))?.id || 'en-US', {shouldValidate: true} );
+                      } else if (value === 'mock-openai') {
+                         setValue('transcriber.model', MOCK_OPENAI_WHISPER_MODELS[0].id, {shouldValidate: true});
+                         setValue('transcriber.language', ALL_TRANSCRIBER_LANGUAGES.find(l=>l.providers.includes('mock-openai'))?.id || 'en-US', {shouldValidate: true});
+                      }
+                    }} 
+                    value={field.value}
+                  >
                     <SelectTrigger id="transcriber.provider" className="mt-1">
                       <SelectValue placeholder="Select provider" />
                     </SelectTrigger>
@@ -99,8 +241,8 @@ export default function TranscriberSettingsTab() {
                       <SelectValue placeholder="Select model" />
                     </SelectTrigger>
                     <SelectContent>
-                      {/* This should dynamically load based on provider */}
-                      {DEEPGRAM_MODELS.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+                      {availableModels.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+                      {availableModels.length === 0 && <SelectItem value="" disabled>No models available for this provider</SelectItem>}
                     </SelectContent>
                   </Select>
                 )}
@@ -130,7 +272,8 @@ export default function TranscriberSettingsTab() {
                       <SelectValue placeholder="Select language" />
                     </SelectTrigger>
                     <SelectContent>
-                      {TRANSCRIBER_LANGUAGES.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                      {availableLanguages.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                      {availableLanguages.length === 0 && <SelectItem value="" disabled>No languages available for this provider</SelectItem>}
                     </SelectContent>
                   </Select>
                 )}
@@ -239,9 +382,6 @@ export default function TranscriberSettingsTab() {
             ))}
           </div>
           <p className="text-sm text-muted-foreground">Frequency filtering and multi-channel support are advanced features (Coming Soon).</p>
-          <Button type="button" variant="outline" onClick={() => toast({ title: "Audio Preview", description: "Audio processing preview not yet implemented."})}>
-            Preview Processed Audio (Sample)
-          </Button>
         </CardContent>
       </Card>
 
@@ -253,7 +393,7 @@ export default function TranscriberSettingsTab() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div>
-            <Label htmlFor="transcriber.qualityControl.confidenceThreshold">Confidence Threshold: {transcriberConfig?.qualityControl?.confidenceThreshold?.toFixed(2)}</Label>
+            <Label htmlFor="transcriber.qualityControl.confidenceThreshold">Confidence Threshold: {watch('transcriber.qualityControl.confidenceThreshold', 0.85).toFixed(2)}</Label>
             <Controller
               name="transcriber.qualityControl.confidenceThreshold"
               control={control}
@@ -295,24 +435,129 @@ export default function TranscriberSettingsTab() {
             />
             <Label htmlFor="transcriber.qualityControl.filterLowConfidence">Filter/Flag Low Confidence Segments</Label>
           </div>
+          
           <div>
-             <Label>Custom Vocabulary / Domain-Specific Terms (Coming Soon)</Label>
-             <p className="text-sm text-muted-foreground mt-1">Adding custom vocabulary can significantly improve accuracy for specific domains.</p>
+             <Label htmlFor="customVocabInput">Custom Vocabulary / Domain-Specific Terms</Label>
+             <div className="flex items-center gap-2 mt-1">
+                <Input
+                    id="customVocabInput"
+                    type="text"
+                    value={customVocabInput}
+                    onChange={(e) => setCustomVocabInput(e.target.value)}
+                    placeholder="Add a term (e.g., Assistly, Genkit)"
+                    className="flex-grow"
+                />
+                <Button type="button" onClick={handleAddCustomVocab}>Add Term</Button>
+             </div>
+             {customVocabulary.length > 0 && (
+                <ScrollArea className="mt-2 h-24 rounded-md border p-2">
+                    <ul className="space-y-1">
+                        {customVocabulary.map(term => (
+                            <li key={term} className="flex items-center justify-between p-1.5 bg-muted/50 rounded text-sm">
+                                <span>{term}</span>
+                                <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveCustomVocab(term)} className="h-6 w-6">
+                                    <X className="h-3 w-3 text-destructive" />
+                                </Button>
+                            </li>
+                        ))}
+                    </ul>
+                </ScrollArea>
+             )}
+             {errors.transcriber?.qualityControl?.customVocabulary && <p className="text-sm text-destructive mt-1">{typeof errors.transcriber.qualityControl.customVocabulary.message === 'string' ? errors.transcriber.qualityControl.customVocabulary.message : "Invalid custom vocabulary"}</p>}
+             <p className="text-xs text-muted-foreground mt-1">Adding custom vocabulary can significantly improve accuracy for specific domains. For Deepgram, these are sent as 'keywords'.</p>
           </div>
         </CardContent>
       </Card>
-      
-      <Button type="button" variant="default" onClick={handleTestTranscription} className="w-full">
-        Test Transcription with Audio Sample (Placeholder)
-      </Button>
 
+      {/* Live Transcription Test */}
+      <Card>
+        <CardHeader>
+            <CardTitle className="flex items-center"><Play className="mr-2 h-5 w-5 text-primary" /> Live Transcription Test</CardTitle>
+            <CardDescription>Test your current transcriber configuration with a live audio recording.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+            <Button 
+                type="button" 
+                onClick={isRecordingLiveTest ? stopLiveTestRecording : startLiveTestRecording}
+                variant={isRecordingLiveTest ? "destructive" : "outline"}
+                className="w-full"
+                disabled={(isDeepgramPending && !isRecordingLiveTest) || (transcriberProvider === 'mock-openai' && !isRecordingLiveTest)} 
+            >
+                {isDeepgramPending && !isRecordingLiveTest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isRecordingLiveTest ? <StopCircle className="mr-2 h-4 w-4" /> : <Mic className="mr-2 h-4 w-4" />}
+                {isRecordingLiveTest ? "Stop Recording" : (transcriberProvider === 'mock-openai' ? "Live Test (Simulated for Mock Provider)" : "Record Audio for Live Test")}
+            </Button>
+            {liveTestTranscriptionResult && (
+                <div>
+                    <Label className="font-semibold">Transcription Result:</Label>
+                    <Textarea 
+                        readOnly 
+                        value={liveTestTranscriptionResult} 
+                        className="mt-1 h-24 bg-muted/50" 
+                        placeholder="Transcription will appear here..."
+                    />
+                </div>
+            )}
+            {liveTestError && (
+                <p className="text-sm text-destructive flex items-center"><AlertCircle className="h-4 w-4 mr-1"/> {liveTestError}</p>
+            )}
+            <p className="text-xs text-muted-foreground">Uses current settings for provider ({watch('transcriber.provider')}), model, and language.</p>
+        </CardContent>
+      </Card>
+
+      {/* Batch Processing */}
+      <Card>
+        <CardHeader>
+            <CardTitle className="flex items-center"><ListChecks className="mr-2 h-5 w-5 text-primary" /> Batch Transcription (Placeholder)</CardTitle>
+            <CardDescription>Upload multiple audio files for transcription.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+            <div className="p-4 border border-dashed rounded-lg bg-card/50 text-center">
+                <UploadCloud className="mx-auto h-10 w-10 text-muted-foreground" />
+                <Label
+                    htmlFor="batch-file-upload"
+                    className="mt-3 inline-flex items-center px-3 py-1.5 border border-transparent shadow-sm text-xs font-medium rounded-md text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring cursor-pointer"
+                >
+                    Select Audio Files
+                </Label>
+                <Input
+                    id="batch-file-upload"
+                    type="file"
+                    multiple
+                    className="sr-only"
+                    onChange={handleBatchFileChange}
+                    accept="audio/*" 
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                    Select one or more audio files (WAV, MP3, etc.).
+                </p>
+            </div>
+            {batchFiles.length > 0 && (
+                <div className="mt-3">
+                    <p className="text-sm font-medium">{batchFiles.length} file(s) selected:</p>
+                    <ScrollArea className="h-20 mt-1 rounded-md border p-1.5">
+                        <ul className="text-xs">
+                        {batchFiles.map(file => <li key={file.name} className="truncate">{file.name}</li>)}
+                        </ul>
+                    </ScrollArea>
+                </div>
+            )}
+            <Button type="button" onClick={handleStartBatchTranscription} className="w-full mt-3" disabled={batchFiles.length === 0}>
+                <PackageOpen className="mr-2 h-4 w-4" />
+                Start Batch Transcription Job
+            </Button>
+            <p className="text-xs text-muted-foreground text-center mt-1">Note: Batch processing is a placeholder and not yet functional.</p>
+        </CardContent>
+      </Card>
+      
        <div className="p-4 my-4 border border-dashed border-accent/50 rounded-lg bg-accent/10 text-accent-foreground flex items-center">
         <AlertCircle size={20} className="mr-3 text-accent flex-shrink-0" />
         <div>
             <h4 className="font-semibold">Developer Note:</h4>
             <p className="text-sm">
-                Many advanced transcriber features (e.g., live testing, dynamic model/language loading per provider, custom vocabulary management, batch processing) require significant backend and API integration.
-                This UI provides the foundational controls. Actual transcription and advanced processing are not yet implemented.
+                Dynamic model/language loading is simulated based on provider selection. Custom vocabulary is stored and passed to Deepgram as 'keywords'.
+                Live testing uses the Deepgram action. Batch processing is a UI placeholder.
+                Full implementation of all features across multiple providers would require extensive API integrations.
             </p>
         </div>
       </div>

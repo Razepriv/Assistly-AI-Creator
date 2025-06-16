@@ -10,6 +10,7 @@ const DeepgramRequestSchema = z.object({
   language: z.string().optional().default('en-US'),
   punctuate: z.boolean().optional().default(true),
   smart_format: z.boolean().optional().default(true),
+  keywords: z.string().optional(), // For custom vocabulary, joined by ':'
 });
 
 export async function transcribeDeepgramAudio(
@@ -22,6 +23,7 @@ export async function transcribeDeepgramAudio(
   const language = formData.get('language') as string || 'en-US';
   const punctuate = formData.get('punctuate') === 'true'; 
   const smart_format = formData.get('smart_format') === 'true';
+  const keywords = formData.get('keywords') as string || undefined; // Expect colon-separated string
 
   console.log('[Deepgram Action] Parsed FormData values:');
   console.log('[Deepgram Action] - audioDataUri (first 100 chars):', audioDataUri?.substring(0, 100));
@@ -29,6 +31,7 @@ export async function transcribeDeepgramAudio(
   console.log('[Deepgram Action] - language:', language);
   console.log('[Deepgram Action] - punctuate:', punctuate);
   console.log('[Deepgram Action] - smart_format:', smart_format);
+  console.log('[Deepgram Action] - keywords:', keywords);
 
   const validatedFields = DeepgramRequestSchema.safeParse({
     audioDataUri,
@@ -36,6 +39,7 @@ export async function transcribeDeepgramAudio(
     language,
     punctuate,
     smart_format,
+    keywords,
   });
 
   if (!validatedFields.success) {
@@ -60,9 +64,9 @@ export async function transcribeDeepgramAudio(
         console.error('[Deepgram Action] Invalid audio data URI format. Expected 2 parts, got:', parts.length);
         throw new Error('Invalid audio data URI format. Ensure it starts with data:<mimetype>;base64,<encoded_data>');
     }
-    const mimeTypePartHeader = parts[0].split(':')[1]; // e.g., "audio/webm;codecs=opus;base64" or "audio/wav;base64"
+    const mimeTypePartHeader = parts[0].split(':')[1]; 
     console.log('[Deepgram Action] Full MimeTypePartHeader from client:', mimeTypePartHeader);
-    const mimeTypePart = mimeTypePartHeader.split(';')[0]; // e.g., "audio/webm" or "audio/wav"
+    const mimeTypePart = mimeTypePartHeader.split(';')[0]; 
     const base64Data = parts[1];
 
     console.log('[Deepgram Action] Extracted MimeType for Content-Type header:', mimeTypePart);
@@ -85,6 +89,20 @@ export async function transcribeDeepgramAudio(
         punctuate: String(validatedFields.data.punctuate),
         smart_format: String(validatedFields.data.smart_format),
     });
+
+    if (validatedFields.data.keywords) {
+        // Deepgram expects keywords multiple times: &keywords=term1&keywords=term2
+        // URLSearchParams typically joins multiple same keys with commas, check Deepgram docs if this is an issue.
+        // For simple cases, split and append manually if direct append doesn't work as expected by Deepgram.
+        // The current `keywords` field in FormData is a single colon-separated string.
+        // We'll split it and add each keyword.
+        const keywordArray = validatedFields.data.keywords.split(':');
+        keywordArray.forEach(kw => {
+            if (kw.trim()) queryParams.append('keywords', kw.trim());
+        });
+        console.log('[Deepgram Action] Added keywords to queryParams:', validatedFields.data.keywords);
+    }
+
     const deepgramApiUrl = `https://api.deepgram.com/v1/listen?${queryParams.toString()}`;
     
     console.log('[Deepgram Action] Calling API URL:', deepgramApiUrl);
@@ -135,4 +153,3 @@ export async function transcribeDeepgramAudio(
     return { error: errorMessage, success: false };
   }
 }
-

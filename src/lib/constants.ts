@@ -10,8 +10,8 @@ export const OPENAI_MODELS = [
 
 export const DEFAULT_VOICE_CONFIG: VoiceConfig = {
   provider: 'elevenlabs',
-  voiceId: '21m00Tcm4TlvDq8ikWAM', // Changed from 'bella' to Rachel's ID
-  language: 'en-US',
+  voiceId: '21m00Tcm4TlvDq8ikWAM', // Rachel's ID
+  language: 'en-US', // This is often inferred by EL based on voiceId
   backgroundSound: 'default',
   backgroundSoundUrl: '',
   backgroundVolume: 0.5,
@@ -24,12 +24,49 @@ export const DEFAULT_VOICE_CONFIG: VoiceConfig = {
   customPunctuation: [],
   pauseDurations: { comma: 150, period: 300, semicolon: 250 },
   smartChunking: true,
-  emotion: 'neutral', // Default emotion
-  tone: 'neutral', // Default tone
+  emotion: 'neutral', 
+  tone: 'neutral', 
   voiceEffects: { echo: false, reverb: false, clarityEnhancement: true },
   noiseReduction: false,
   audioQuality: { bitrate: 128, sampleRate: 24000 },
+  providerSpecific: {
+    elevenlabs: {
+      model_id: 'eleven_multilingual_v2', // Default EL model
+      stability: 0.75,
+      similarity_boost: 0.75,
+    }
+  }
 };
+
+export const TRANSCRIBER_PROVIDERS = [
+    { id: 'deepgram', name: 'Deepgram' },
+    { id: 'mock-openai', name: 'Mock OpenAI Whisper (Simulated)' },
+    // { id: 'assemblyai', name: 'AssemblyAI' },
+];
+
+export const DEEPGRAM_MODELS = [
+    { id: 'nova-2', name: 'Nova-2 (Latest, General)' },
+    { id: 'nova-2-general', name: 'Nova-2 General' },
+    { id: 'nova-2-meeting', name: 'Nova-2 Meeting Optimized' },
+    { id: 'nova-2-phonecall', name: 'Nova-2 Phone Call Optimized' },
+    { id: 'base', name: 'Base (Legacy)' },
+];
+
+export const MOCK_OPENAI_WHISPER_MODELS = [
+    { id: 'whisper-1', name: 'Whisper v1 (Simulated)'},
+    { id: 'whisper-large-v2', name: 'Whisper Large v2 (Simulated)'},
+];
+
+export const ALL_TRANSCRIBER_LANGUAGES = [
+  { id: 'en-US', name: 'English (US)', providers: ['deepgram', 'mock-openai'] },
+  { id: 'en-GB', name: 'English (UK)', providers: ['deepgram', 'mock-openai'] },
+  { id: 'es', name: 'Español', providers: ['deepgram', 'mock-openai'] },
+  { id: 'fr', name: 'Français', providers: ['deepgram', 'mock-openai'] },
+  { id: 'de', name: 'Deutsch', providers: ['deepgram', 'mock-openai'] },
+  { id: 'ja', name: '日本語 (Japanese)', providers: ['deepgram', 'mock-openai']},
+  { id: 'auto', name: 'Auto-detect (Provider Specific)', providers: ['deepgram'] }, // Mock OpenAI might not have this
+];
+
 
 export const DEFAULT_TRANSCRIBER_CONFIG: TranscriberConfig = {
   provider: 'deepgram',
@@ -53,7 +90,7 @@ export const DEFAULT_TRANSCRIBER_CONFIG: TranscriberConfig = {
   qualityControl: {
     confidenceThreshold: 0.85,
     minWordLength: 0,
-    customVocabulary: [],
+    customVocabulary: [], // Initialize customVocabulary
     filterLowConfidence: false,
   },
 };
@@ -126,7 +163,7 @@ export const INITIAL_ASSISTANT_CONFIGS: Record<string, AssistantConfig> = {
     systemPromptEnforcement: { enabled: false },
     voice: {
       ...DEFAULT_VOICE_CONFIG,
-      voiceId: '21m00Tcm4TlvDq8ikWAM', // Rachel's ID (already default)
+      voiceId: '6JsmTroalVewG1gA6Jmw', // Sia's ID
       speakingRate: 1.1,
       pitch: 1.05,
       emotion: 'excited',
@@ -141,4 +178,3 @@ export const INITIAL_ASSISTANT_CONFIGS: Record<string, AssistantConfig> = {
     }
   },
 };
-
