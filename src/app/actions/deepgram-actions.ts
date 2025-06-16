@@ -60,11 +60,12 @@ export async function transcribeDeepgramAudio(
         console.error('[Deepgram Action] Invalid audio data URI format. Expected 2 parts, got:', parts.length);
         throw new Error('Invalid audio data URI format. Ensure it starts with data:<mimetype>;base64,<encoded_data>');
     }
-    const mimeTypePartHeader = parts[0].split(':')[1]; // e.g., "audio/webm;codecs=opus;base64" or "audio/webm;base64"
-    const mimeTypePart = mimeTypePartHeader.split(';')[0]; // e.g., "audio/webm"
+    const mimeTypePartHeader = parts[0].split(':')[1]; // e.g., "audio/webm;codecs=opus;base64" or "audio/wav;base64"
+    console.log('[Deepgram Action] Full MimeTypePartHeader from client:', mimeTypePartHeader);
+    const mimeTypePart = mimeTypePartHeader.split(';')[0]; // e.g., "audio/webm" or "audio/wav"
     const base64Data = parts[1];
 
-    console.log('[Deepgram Action] Extracted MimeType:', mimeTypePart);
+    console.log('[Deepgram Action] Extracted MimeType for Content-Type header:', mimeTypePart);
     if (!mimeTypePart || !base64Data) {
         console.error('[Deepgram Action] Failed to extract MimeType or Base64 data from URI.');
         throw new Error('Failed to parse audio data URI. MimeType or data missing.');
@@ -83,9 +84,6 @@ export async function transcribeDeepgramAudio(
         language: validatedFields.data.language,
         punctuate: String(validatedFields.data.punctuate),
         smart_format: String(validatedFields.data.smart_format),
-        // You can add other supported Deepgram features here as query params
-        // For example: features: 'diarize', utterances: 'true', etc.
-        // Check Deepgram docs for /v1/listen endpoint options.
     });
     const deepgramApiUrl = `https://api.deepgram.com/v1/listen?${queryParams.toString()}`;
     
@@ -137,3 +135,4 @@ export async function transcribeDeepgramAudio(
     return { error: errorMessage, success: false };
   }
 }
+

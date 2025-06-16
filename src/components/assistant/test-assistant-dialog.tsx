@@ -82,13 +82,13 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
         setAssistantConfig(config);
         if (open && chatHistory.length === 0 && config.firstMessage) {
           const firstMsgId = nanoid();
-          setChatHistory([{ id: firstMsgId, role: 'assistant', content: config.firstMessage, isSynthesizing: true }]);
+          setChatHistory([{ id: firstMsgId, role: 'assistant', content: config.firstMessage, isSynthesizing: true, isThinking: false }]);
           if (config.voice && config.firstMessage) {
              startTransition(() => {
                 handleElevenLabsSynthesis(config.firstMessage, config.voice, firstMsgId);
              });
           } else {
-             setChatHistory([{ id: firstMsgId, role: 'assistant', content: config.firstMessage || "Welcome!", isSynthesizing: false }]);
+             setChatHistory([{ id: firstMsgId, role: 'assistant', content: config.firstMessage || "Welcome!", isSynthesizing: false, isThinking: false }]);
           }
         }
       } else {
@@ -100,14 +100,13 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
         resetDialogState();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assistantId, open, getConfig, toast, onOpenChange]); // Added dependencies for safety
+  }, [assistantId, open, getConfig, toast, onOpenChange]); 
 
 
   useEffect(() => {
     if (!isDeepgramPending && deepgramState) {
       if (deepgramState.success && deepgramState.transcribedText !== null && deepgramState.transcribedText !== undefined) {
         const transcribedContent = deepgramState.transcribedText || "";
-        // Update the specific message that was transcribing
         setChatHistory(prev => prev.map(msg => 
             msg.isTranscribing ? { ...msg, content: `User (Voice): ${transcribedContent.trim() ? transcribedContent : "[empty voice note]"}`, isTranscribing: false, audioDataUri: undefined } : msg
         ));
@@ -118,15 +117,15 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
         }
       } else if (deepgramState.error) {
         toast({ title: "Transcription Error", description: deepgramState.error, variant: "destructive" });
-        setChatHistory(prev => prev.filter(msg => !msg.isTranscribing)); // Remove "transcribing..." message
+        setChatHistory(prev => prev.filter(msg => !msg.isTranscribing)); 
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deepgramState, isDeepgramPending, toast]); // Removed handleSendMessage from dep array as it's useCallback
+  }, [deepgramState, isDeepgramPending, toast]);
 
   useEffect(() => {
     if (!isElevenLabsPending && elevenLabsState) {
-      setChatHistory(prev => prev.map(msg => ({ ...msg, isSynthesizing: false })));
+      setChatHistory(prev => prev.map(msg => ({ ...msg, isSynthesizing: false, isThinking: false })));
 
       if (elevenLabsState.success && elevenLabsState.audioBase64) {
         if (currentAudioRef.current && !currentAudioRef.current.paused) {
@@ -197,19 +196,31 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorderRef.current = new MediaRecorder(stream, { mimeType: 'audio/webm' }); 
+        
+        const options = { mimeType: '' };
+        if (MediaRecorder.isTypeSupported('audio/wav')) {
+          options.mimeType = 'audio/wav';
+        } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+          options.mimeType = 'audio/webm'; 
+        } else {
+           toast({ title: "Recording Format", description: "WAV and WEBM not supported, using browser default.", variant: "default" });
+        }
+
+        mediaRecorderRef.current = new MediaRecorder(stream, options.mimeType ? { mimeType: options.mimeType } : undefined);
+        
         mediaRecorderRef.current.ondataavailable = (event) => {
           if (event.data.size > 0) {
             setAudioChunks((prev) => [...prev, event.data]);
           }
         };
         mediaRecorderRef.current.onstop = async () => {
-          const audioBlob = new Blob(audioChunks, { type: mediaRecorderRef.current?.mimeType || 'audio/webm' });
+          const recordedMimeType = mediaRecorderRef.current?.mimeType || 'audio/webm'; // Default if somehow undefined
+          const audioBlob = new Blob(audioChunks, { type: recordedMimeType });
           setAudioChunks([]);
           
           if (audioBlob.size === 0) {
             toast({ title: "Empty Recording", description: "No audio was recorded.", variant: "default" });
-            setChatHistory(prev => prev.filter(msg => !msg.isTranscribing)); // Remove "transcribing..." if it exists
+            setChatHistory(prev => prev.filter(msg => !msg.isTranscribing));
             return;
           }
 
@@ -243,7 +254,7 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
         mediaRecorderRef.current.start();
         setIsRecording(true);
         setAudioChunks([]); 
-        toast({ title: "Recording Started", description: "Speak now..." });
+        toast({ title: "Recording Started", description: `Speak now... (Format: ${mediaRecorderRef.current.mimeType})` });
       } catch (err) {
         console.error('Error starting recording:', err);
         toast({ title: "Recording Error", description: "Could not start recording. Check console.", variant: "destructive" });
@@ -256,8 +267,9 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stop(); // This will trigger the onstop event
       setIsRecording(false);
+      // toast({ title: "Recording Stopped", description: "Processing audio..." }); // Moved to onstop for clarity
     }
   };
 
@@ -272,7 +284,7 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
   const handleElevenLabsSynthesis = useCallback((textToSynthesize: string, voiceConf: VoiceConfig, messageIdToUpdate?: string) => {
     if (!textToSynthesize.trim()) {
         setChatHistory(prev => prev.map(msg => 
-            msg.id === messageIdToUpdate ? { ...msg, isSynthesizing: false } : msg
+            msg.id === messageIdToUpdate ? { ...msg, isSynthesizing: false, isThinking: false } : msg
         ));
         setIsAISpeaking(false);
         return;
@@ -295,10 +307,9 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
             msg.id === targetMsgId ? { ...msg, content: textToSynthesize, isSynthesizing: true, isThinking: false } : msg)
         );
     } else {
-        // This case should ideally not happen if synthesis is always tied to an existing message update
         console.warn("handleElevenLabsSynthesis called without messageIdToUpdate for new message");
         const newMsgId = nanoid();
-        setChatHistory(prev => [...prev, { id: newMsgId, role: 'assistant', content: textToSynthesize, isSynthesizing: true }]);
+        setChatHistory(prev => [...prev, { id: newMsgId, role: 'assistant', content: textToSynthesize, isSynthesizing: true, isThinking: false }]);
     }
     
     startTransition(() => {
@@ -318,14 +329,14 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
     
     setIsWaitingForAI(true);
     const thinkingMessageId = nanoid();
-    setChatHistory(prev => [...prev, { id: thinkingMessageId, role: 'assistant', content: '...', isThinking: true }]);
+    setChatHistory(prev => [...prev, { id: thinkingMessageId, role: 'assistant', content: '...', isThinking: true, isSynthesizing: false }]);
 
     try {
       const historyForFlow = chatHistory
         .filter(msg => msg.id !== thinkingMessageId && !msg.isTranscribing && !msg.isSynthesizing && !msg.isThinking && msg.content && msg.content.trim() !== '...') 
         .map(({ isThinking, isTranscribing, isSynthesizing, audioDataUri, ...rest }) => ({
             ...rest,
-            content: rest.content.replace(/^User \(Voice\): /, '') // Strip prefix for AI
+            content: rest.content.replace(/^User \(Voice\): /, '') 
         }));
 
        const latestUserMessageForFlow = messageContent.replace(/^User \(Voice\): /, '');
@@ -340,7 +351,8 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
         chatHistory: historyForFlow,
       });
       
-      setIsWaitingForAI(false);
+      setIsWaitingForAI(false); // AI done thinking with text
+      // Update the thinking message with the actual response and mark for synthesis
       setChatHistory(prev => prev.map(msg => 
         msg.id === thinkingMessageId ? { ...msg, content: response.assistantResponse, isThinking: false, isSynthesizing: true } : msg
       ));
@@ -348,10 +360,11 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
       if (assistantConfig.voice && response.assistantResponse) {
         handleElevenLabsSynthesis(response.assistantResponse, assistantConfig.voice, thinkingMessageId);
       } else {
+        // If no voice config or no response, ensure synthesizing is false
         setChatHistory(prev => prev.map(msg => 
             msg.id === thinkingMessageId ? { ...msg, isSynthesizing: false } : msg
         ));
-        setIsAISpeaking(false);
+        setIsAISpeaking(false); // Ensure not stuck in speaking state
       }
 
     } catch (error) {
@@ -371,7 +384,10 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
     handleSendMessage(currentMessage);
   };
   
-  const isProcessingOtherThanRecording = isDeepgramPending || isElevenLabsPending || isWaitingForAI || isAISpeaking;
+  const micButtonDisabled = 
+    hasMicPermission === false ||
+    (!isRecording && (isDeepgramPending || isElevenLabsPending || isWaitingForAI || isAISpeaking));
+
 
   if (!open) return null;
 
@@ -409,7 +425,7 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
                 }`}
               >
                 {msg.role === 'assistant' && (
-                  <Bot className={`h-7 w-7 text-primary flex-shrink-0 ${(msg.isThinking || msg.isSynthesizing || (isAISpeaking && chatHistory.find(m => m.id === msg.id && m.content === msg.content && (m.isSynthesizing || (currentAudioRef.current && !currentAudioRef.current.paused))) ) ) ? 'animate-pulse': ''}`} />
+                  <Bot className={`h-7 w-7 text-primary flex-shrink-0 ${(msg.isThinking || msg.isSynthesizing || (isAISpeaking && chatHistory.find(m => m.id === msg.id && (m.isSynthesizing || (currentAudioRef.current && !currentAudioRef.current.paused))) ) ) ? 'animate-pulse': ''}`} />
                 )}
                 <div
                   className={`flex flex-col items-start max-w-[70%] ${
@@ -433,7 +449,7 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
                          {msg.isTranscribing && <span className="ml-1 animate-pulse">🎤...</span>}
                          {msg.isSynthesizing && <span className="ml-1 animate-pulse">🔊...</span>}
                     </div>
-                     {msg.role === 'assistant' && isAISpeaking && chatHistory.some(m => m.id === msg.id && m.content === msg.content && !m.isThinking && !m.isSynthesizing) && currentAudioRef.current && !currentAudioRef.current.paused && (
+                     {msg.role === 'assistant' && isAISpeaking && chatHistory.some(m => m.id === msg.id && !m.isThinking && !m.isSynthesizing) && currentAudioRef.current && !currentAudioRef.current.paused && (
                          <div className="text-xs text-primary mt-1 flex items-center"><Speaker className="h-3 w-3 mr-1 animate-pulse" /> Speaking...</div>
                     )}
                 </div>
@@ -454,7 +470,7 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
               className={`${isRecording ? 'bg-red-500 hover:bg-red-600' : 'bg-pink-500 hover:bg-pink-600'} text-white rounded-full h-10 w-10`}
               onClick={handleVoiceInputClick}
               aria-label={isRecording ? "Stop recording" : "Start voice input"}
-              disabled={hasMicPermission === false || (!isRecording && isProcessingOtherThanRecording)}
+              disabled={micButtonDisabled}
             >
               {isRecording ? <StopCircle className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
             </Button>
@@ -464,12 +480,12 @@ export default function TestAssistantDialog({ open, onOpenChange, assistantId }:
               value={currentMessage}
               onChange={(e) => setCurrentMessage(e.target.value)}
               className="flex-1 h-10"
-              disabled={isRecording || isProcessingOtherThanRecording}
+              disabled={isRecording || isDeepgramPending || isElevenLabsPending || isWaitingForAI || isAISpeaking}
             />
-            <Button type="submit" size="icon" className="h-10 w-10" disabled={isRecording || isProcessingOtherThanRecording || !currentMessage.trim()}>
+            <Button type="submit" size="icon" className="h-10 w-10" disabled={isRecording || isDeepgramPending || isElevenLabsPending || isWaitingForAI || isAISpeaking || !currentMessage.trim()}>
               {(isWaitingForAI || isDeepgramPending || isElevenLabsPending) ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
             </Button>
-             <Button type="button" variant="outline" size="icon" className="h-10 w-10" onClick={() => toast({title: "Simulated", description: "File attachment (simulated)."}) } disabled={isRecording || isProcessingOtherThanRecording}>
+             <Button type="button" variant="outline" size="icon" className="h-10 w-10" onClick={() => toast({title: "Simulated", description: "File attachment (simulated)."}) } disabled={isRecording || isDeepgramPending || isElevenLabsPending || isWaitingForAI || isAISpeaking}>
               <Paperclip className="h-5 w-5" />
             </Button>
           </form>
