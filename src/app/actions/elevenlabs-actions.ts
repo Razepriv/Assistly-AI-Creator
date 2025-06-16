@@ -30,18 +30,16 @@ export async function synthesizeElevenLabsSpeech(
 
   if (!apiKeyFromEnv) {
     console.error('[ElevenLabs Action] CRITICAL: ELEVENLABS_API_KEY is not set in the environment variables. Please check your .env file and restart the server.');
-    // Return a user-friendly error, but the "Failed to fetch" might still occur if this action crashes before this point.
-    return { 
-      error: 'Server configuration error: ElevenLabs API key is missing. Please contact support or check server logs for more details.', 
-      success: false 
+    return {
+      error: 'Server configuration error: ElevenLabs API key is missing. Please contact support or check server logs for more details.',
+      success: false
     };
   } else {
     console.log(`[ElevenLabs Action] ELEVENLABS_API_KEY is present (length: ${apiKeyFromEnv.length}).`);
   }
-  
-  console.log('[ElevenLabs Action] Attempting to parse FormData. Received FormData keys:', Array.from(formData.keys()));
+
   let text, voiceId, model_id_form, stabilityValue, similarityBoostValue, styleValue, useSpeakerBoostValue;
-  
+
   try {
     text = formData.get('text') as string;
     voiceId = formData.get('voiceId') as string;
@@ -64,7 +62,7 @@ export async function synthesizeElevenLabsSpeech(
     console.error('[ElevenLabs Action] Error retrieving data from FormData:', e);
     return { error: `Server error: Could not process form data. Details: ${e.message}`, success: false };
   }
-  
+
   const validatedFields = ElevenLabsSpeechSchema.safeParse({
     text: text,
     voiceId: voiceId,
@@ -82,41 +80,41 @@ export async function synthesizeElevenLabsSpeech(
       success: false,
     };
   }
-  
+
   console.log('[ElevenLabs Action] Validated fields by Zod:', validatedFields.data);
 
-  const { 
-    text: validatedText, 
-    voiceId: validatedVoiceId, 
-    model_id: validatedModelId, 
-    stability, 
-    similarity_boost, 
-    style, 
-    use_speaker_boost 
+  const {
+    text: validatedText,
+    voiceId: validatedVoiceId,
+    model_id: validatedModelId,
+    stability,
+    similarity_boost,
+    style,
+    use_speaker_boost
   } = validatedFields.data;
-  
+
   const elevenLabsApiUrl = `https://api.elevenlabs.io/v1/text-to-speech/${validatedVoiceId}`;
   const headers = {
     'Accept': 'audio/mpeg',
     'Content-Type': 'application/json',
-    'XI-API-KEY': apiKeyFromEnv, // Already confirmed this is present
+    'XI-API-KEY': apiKeyFromEnv,
   };
 
   const body: Record<string, any> = {
     text: validatedText,
-    model_id: validatedModelId || "eleven_multilingual_v2", 
+    model_id: validatedModelId || "eleven_multilingual_v2",
   };
 
   const voice_settings: Record<string, any> = {};
   if (stability !== undefined) voice_settings.stability = stability;
   if (similarity_boost !== undefined) voice_settings.similarity_boost = similarity_boost;
-  if (style !== undefined) voice_settings.style = style; 
+  if (style !== undefined) voice_settings.style = style;
   if (use_speaker_boost !== undefined) voice_settings.use_speaker_boost = use_speaker_boost;
-  
+
   if (Object.keys(voice_settings).length > 0) {
     body.voice_settings = voice_settings;
   }
-  
+
   console.log('[ElevenLabs Action] Calling API URL:', elevenLabsApiUrl);
   console.log('[ElevenLabs Action] Request Headers (API Key Redacted):', JSON.stringify(headers, (key, value) => key === 'XI-API-KEY' ? 'REDACTED' : value));
   console.log('[ElevenLabs Action] Request body:', JSON.stringify(body));
@@ -131,26 +129,25 @@ export async function synthesizeElevenLabsSpeech(
     console.log(`[ElevenLabs Action] API Response Status: ${response.status} ${response.statusText}`);
 
     if (!response.ok) {
-      let errorResponseText = await response.text(); 
+      let errorResponseText = await response.text();
       console.error('[ElevenLabs Action] API Error Response Body:', errorResponseText);
-      
+
       let errorDetailMessage = 'Unknown error from ElevenLabs API';
       try {
         const errorBodyJson = JSON.parse(errorResponseText);
         if (errorBodyJson.detail && typeof errorBodyJson.detail.message === 'string') {
             errorDetailMessage = errorBodyJson.detail.message;
         } else if (errorBodyJson.detail && Array.isArray(errorBodyJson.detail) && errorBodyJson.detail.length > 0 && typeof errorBodyJson.detail[0].msg === 'string') {
-            errorDetailMessage = errorBodyJson.detail[0].msg; 
+            errorDetailMessage = errorBodyJson.detail[0].msg;
         } else if (errorBodyJson.detail && typeof errorBodyJson.detail === 'string') {
             errorDetailMessage = errorBodyJson.detail;
         } else {
-            errorDetailMessage = JSON.stringify(errorBodyJson); // Fallback to stringifying the detail object
+            errorDetailMessage = JSON.stringify(errorBodyJson);
         }
       } catch (e) {
-        // If parsing errorBodyJson fails, use the raw text, truncated
-        errorDetailMessage = errorResponseText.substring(0, 500) + (errorResponseText.length > 500 ? "..." : ""); 
+        errorDetailMessage = errorResponseText.substring(0, 500) + (errorResponseText.length > 500 ? "..." : "");
       }
-      
+
       return { error: `ElevenLabs API Error (${response.status}): ${errorDetailMessage}`, success: false };
     }
 
@@ -163,13 +160,19 @@ export async function synthesizeElevenLabsSpeech(
     console.log('[ElevenLabs Action] Speech synthesis successful. Audio data URI to be returned (length approx):', `data:audio/mpeg;base64,${audioBase64}`.length);
     return { audioBase64: audioBase64, success: true };
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[ElevenLabs Action] General error during external fetch or response processing (e.g., network issue, DNS, malformed response from ElevenLabs):', error);
     let errorMessage = 'Failed to connect to ElevenLabs API or process its response. ';
     if (error instanceof Error) {
         errorMessage += error.message;
-        if (error.cause) { 
-            errorMessage += ` Cause: ${JSON.stringify(error.cause)}`;
+        if (error.cause instanceof Error) {
+            errorMessage += ` Cause: ${error.cause.message}`;
+            console.error('[ElevenLabs Action] Error Cause Message:', error.cause.message);
+            console.error('[ElevenLabs Action] Error Cause Stack:', error.cause.stack);
+        } else if (error.cause) {
+            const causeString = String(error.cause);
+            errorMessage += ` Cause: ${causeString}`;
+            console.error('[ElevenLabs Action] Error Cause (non-Error object):', causeString);
         }
     } else {
         errorMessage += String(error);
