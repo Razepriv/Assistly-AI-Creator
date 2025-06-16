@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
-import { UploadCloud, FileText, X, AlertCircle } from 'lucide-react';
+import { UploadCloud, FileText, X, AlertCircle, Zap } from 'lucide-react';
 import SuggestedFiles from '@/components/assistant/suggested-files';
 import type { AssistantConfig, FileMetadata } from '@/types';
 import { useToast } from "@/hooks/use-toast";
@@ -213,13 +213,16 @@ export default function AdvancedSettingsTab() {
       <SuggestedFiles />
 
       <div>
-        <h3 className="text-lg font-medium text-foreground">Performance Metrics</h3>
+        <h3 className="text-lg font-medium text-foreground flex items-center">
+          <Zap className="mr-2 h-5 w-5 text-primary" />
+          Performance Metrics
+        </h3>
         <div className="mt-2 p-4 border rounded-lg bg-card/50">
           <p className="text-sm text-muted-foreground">
-            Real-time Latency Display: <span className="font-semibold text-foreground">(placeholder)</span>
+            AI response latency from the "Test Assistant" dialog will be displayed there after each interaction.
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            This is a placeholder for real-time performance metrics.
+            This provides a general idea of the assistant's responsiveness.
           </p>
         </div>
       </div>
