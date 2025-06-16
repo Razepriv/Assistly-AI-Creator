@@ -57,12 +57,12 @@ const voiceConfigSchema = z.object({
   }).default({ bitrate: 128, sampleRate: 24000 }),
 }).default(DEFAULT_VOICE_CONFIG).refine(data => {
     if (data.backgroundSound === 'custom' && (!data.backgroundSoundUrl || data.backgroundSoundUrl.trim() === '')) {
-      return false; 
+      return false;
     }
     return true;
   }, {
     message: "Custom background sound URL is required when 'Custom URL' is selected.",
-    path: ["backgroundSoundUrl"], 
+    path: ["backgroundSoundUrl"],
 });
 
 
@@ -108,7 +108,7 @@ const assistantConfigSchema = z.object({
       name: z.string(),
       type: z.string(),
       size: z.number().max(MAX_FILE_SIZE_BYTES, `File size cannot exceed ${MAX_FILE_SIZE_MB}MB`),
-      dataUri: z.string().optional(), 
+      dataUri: z.string().optional(),
     })
   ).max(MAX_FILES, `Cannot upload more than ${MAX_FILES} files`).optional().default([]),
   systemPromptEnforcement: z.object({
@@ -130,7 +130,7 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
   const { toast } = useToast();
   const getConfig = useConfigStore((state) => state.getConfig);
   const updateConfig = useConfigStore((state) => state.updateConfig);
-  
+
   const initialConfigData = getConfig(assistantId);
 
   const initialConfig = useMemo(() => {
@@ -153,11 +153,11 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
       };
     }
   }, [initialConfigData]);
-  
+
   const methods = useForm<AssistantConfig>({
     resolver: zodResolver(assistantConfigSchema),
     defaultValues: initialConfig || { ...DEFAULT_ASSISTANT_CONFIG, id: assistantId, assistantName: "Loading..." },
-    mode: "onBlur", 
+    mode: "onBlur",
   });
 
   const isResetting = useRef(false);
@@ -165,7 +165,7 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
   useEffect(() => {
     if (initialConfig) {
       isResetting.current = true;
-      methods.reset(initialConfig); 
+      methods.reset(initialConfig);
       queueMicrotask(() => { // Changed from setTimeout(0) to queueMicrotask
         isResetting.current = false;
       });
@@ -176,15 +176,15 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
   useEffect(() => {
     const subscription = methods.watch((formValue, { name, type }) => {
       if (isResetting.current) {
-        return; 
+        return;
       }
       // Auto-save on blur for specific fields, or on change for things like sliders/switches.
       // The exact logic here might need refinement based on desired UX for auto-saving.
       // For now, let's assume any "change" could be auto-saved.
-      if (type === 'change' && name && assistantId) { 
+      if (type === 'change' && name && assistantId) {
         // We need to be careful here to pass the correct nested structure if name is nested.
         let updatePayload: Partial<AssistantConfig> = {};
-        
+
         if (name.startsWith('voice.')) {
             updatePayload.voice = formValue.voice;
         } else if (name.startsWith('transcriber.')) {
@@ -197,7 +197,7 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
           // @ts-ignore - formValue might not be a perfect Partial<AssistantConfig> here, but RHF handles types.
           updatePayload[fieldNameKey] = formValue[fieldNameKey];
         }
-        
+
         if (Object.keys(updatePayload).length > 0) {
              updateConfig(assistantId, updatePayload);
         }
@@ -220,7 +220,7 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
     const isValid = await methods.trigger();
     if (isValid) {
       // RHF's handleSubmit will pass the latest form values, already validated.
-      methods.handleSubmit(onSubmit)(); 
+      methods.handleSubmit(onSubmit)();
     } else {
       const errors = methods.formState.errors;
       let errorMessage = "Please check the form for errors.";
@@ -238,7 +238,7 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
         }
         return null;
       };
-      
+
       const specificError = findFirstErrorMessage(errors);
       if (specificError) {
         errorMessage = specificError;
@@ -256,7 +256,7 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
     }
   };
 
-  if (!initialConfig) { 
+  if (!initialConfig) {
     return (
       <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed shadow-sm p-8">
         <div className="text-center">
@@ -272,7 +272,7 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
 
   return (
     <FormProvider {...methods}>
-      <form onSubmit={(e) => e.preventDefault()} className="h-full flex flex-col">
+      <div className="h-full flex flex-col"> {/* Changed from form to div */}
         <Tabs defaultValue="model" className="flex-1 flex flex-col overflow-hidden">
           <div className="px-1">
             <TabsList className="grid w-full grid-cols-3 md:grid-cols-6 gap-2 h-auto p-1 bg-muted rounded-lg">
@@ -317,7 +317,7 @@ export default function ConfigPanel({ assistantId }: ConfigPanelProps) {
             Save Configuration
           </Button>
         </div>
-      </form>
+      </div>
     </FormProvider>
   );
 }
