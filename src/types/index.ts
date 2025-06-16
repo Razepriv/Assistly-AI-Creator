@@ -131,7 +131,7 @@ export interface TestChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  is চিন্তা?: boolean; // Optional: to mark thinking state for AI
+  isThinking?: boolean; // Corrected typo from is চিন্তা?
 }
 
 export interface TestAssistantChatInput {
@@ -143,3 +143,4 @@ export interface TestAssistantChatInput {
 export interface TestAssistantChatOutput {
   assistantResponse: string;
 }
+

@@ -10,20 +10,26 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import type { TestAssistantChatInput, TestAssistantChatOutput, AssistantConfig, TestChatMessage } from '@/types';
+// Using aliased import for types from '@/types' to avoid naming conflicts with Zod-inferred types
+import type { AssistantConfig as FullAssistantConfig, TestChatMessage as FullTestChatMessage, TestAssistantChatInput as FullTestAssistantChatInput, TestAssistantChatOutput as FullTestAssistantChatOutput } from '@/types';
 
-// Zod schema for AssistantConfig (simplified for flow input, actual config can be richer)
+// Zod schema for AssistantConfig (subset of FullAssistantConfig, only fields needed by the flow)
 const AssistantConfigSchema = z.object({
   id: z.string(),
   assistantName: z.string(),
   provider: z.literal("openai"),
   model: z.string(),
-  firstMessage: z.string(),
+  firstMessage: z.string(), // Though not used in this prompt, part of the broader config
   systemPrompt: z.string(),
   maxTokens: z.number(),
   temperature: z.number(),
-  // files and other detailed configs are not directly used by the LLM prompt in this basic chat flow
-  // but are part of the AssistantConfig type. We only strictly need what the prompt uses.
+  // Ensure other fields from FullAssistantConfig are optional or handled if needed by the flow/prompt
+  files: z.array(z.object({ name: z.string(), type: z.string(), size: z.number(), dataUri: z.string().optional() })).optional().default([]),
+  voice: z.any().optional(), // Using z.any() for simplicity as voice config is complex and not used here
+  transcriber: z.any().optional(), // Same for transcriber
+  systemPromptEnforcement: z.object({ enabled: z.boolean(), level: z.string().optional() }).optional(),
+  toolsIntegrations: z.record(z.any()).optional(),
+  analysisSettings: z.record(z.any()).optional(),
 });
 
 const TestChatMessageSchema = z.object({
@@ -33,55 +39,68 @@ const TestChatMessageSchema = z.object({
   isThinking: z.boolean().optional(),
 });
 
-const TestAssistantChatInputSchema = z.object({
+// This Zod schema defines the input for the Genkit flow and prompt
+const TestAssistantChatInputSchemaInternal = z.object({
   userInput: z.string().describe('The current message from the user.'),
   assistantConfig: AssistantConfigSchema.describe('The configuration of the assistant being tested.'),
   chatHistory: z.array(TestChatMessageSchema).describe('The history of the current test conversation.'),
 });
+// Type alias for Zod-inferred type
+type TestAssistantChatInputInternal = z.infer<typeof TestAssistantChatInputSchemaInternal>;
 
-const TestAssistantChatOutputSchema = z.object({
+const TestAssistantChatOutputSchemaInternal = z.object({
   assistantResponse: z.string().describe("The assistant's generated response."),
 });
+// Type alias for Zod-inferred type
+type TestAssistantChatOutputInternal = z.infer<typeof TestAssistantChatOutputSchemaInternal>;
 
-export async function testAssistantChat(input: TestAssistantChatInput): Promise<TestAssistantChatOutput> {
-  return testAssistantChatFlow(input);
+
+// Exported function uses types from '@/types'
+export async function testAssistantChat(input: FullTestAssistantChatInput): Promise<FullTestAssistantChatOutput> {
+  // The input here is FullTestAssistantChatInput.
+  // When passed to testAssistantChatFlow, Zod will parse it against TestAssistantChatInputSchemaInternal.
+  return testAssistantChatFlow(input as any); // Cast as any to satisfy Genkit's stricter Zod type, parsing handles it.
 }
 
-const systemPromptTemplate = `System Prompt: {{{assistantConfig.systemPrompt}}}`;
-
-const historyTemplate = `
-{{#if chatHistory.length}}
-Previous conversation:
-{{#each chatHistory}}
-{{#if (eq this.role "user")}}User: {{this.content}}{{/if}}
-{{#if (eq this.role "assistant")}}Assistant: {{this.content}}{{/if}}
-{{/each}}
-{{/if}}`;
-
-const currentUserInputTemplate = `Current User Input: {{{userInput}}}`;
-
-const prompt = ai.definePrompt({
+const testAssistantChatPromptDefinition = ai.definePrompt({
   name: 'testAssistantChatPrompt',
-  input: { schema: TestAssistantChatInputSchema },
-  output: { schema: TestAssistantChatOutputSchema },
-  // Constructing the prompt string to send to the LLM
-  // The order is important: System instructions, then history, then current input.
-  prompt: `
-${systemPromptTemplate}
+  input: { schema: TestAssistantChatInputSchemaInternal },
+  output: { schema: TestAssistantChatOutputSchemaInternal },
+  prompt: (input: TestAssistantChatInputInternal) => {
+    let historySegment = '';
+    if (input.chatHistory && input.chatHistory.length > 0) {
+      historySegment = 'Previous conversation:\n';
+      historySegment += input.chatHistory
+        .map(msg => {
+          if (msg.role === 'user') {
+            return `User: ${msg.content}`;
+          }
+          if (msg.role === 'assistant') {
+            return `Assistant: ${msg.content}`;
+          }
+          return null; 
+        })
+        .filter(Boolean) 
+        .join('\n');
+      historySegment += '\n'; 
+    }
 
-${historyTemplate}
+    // Construct the full prompt string programmatically
+    const fullPrompt = `
+System Prompt: ${input.assistantConfig.systemPrompt}
 
-${currentUserInputTemplate}
+${historySegment}Current User Input: ${input.userInput}
 
 Assistant Response:
-`,
-  // We can pass model and other generation config directly from the assistant's config
-  configBuilder: (input) => {
+`;
+    // Trim to remove leading/trailing whitespace from the template literal itself
+    return fullPrompt.trim();
+  },
+  configBuilder: (input: TestAssistantChatInputInternal) => {
     return {
       model: input.assistantConfig.model,
       temperature: input.assistantConfig.temperature,
       maxOutputTokens: input.assistantConfig.maxTokens,
-      // stopSequences: ... if needed
     };
   },
 });
@@ -89,16 +108,15 @@ Assistant Response:
 const testAssistantChatFlow = ai.defineFlow(
   {
     name: 'testAssistantChatFlow',
-    inputSchema: TestAssistantChatInputSchema,
-    outputSchema: TestAssistantChatOutputSchema,
+    inputSchema: TestAssistantChatInputSchemaInternal,
+    outputSchema: TestAssistantChatOutputSchemaInternal,
   },
-  async (input) => {
-    const { output } = await prompt(input);
+  async (input: TestAssistantChatInputInternal) : Promise<TestAssistantChatOutputInternal> => {
+    const { output } = await testAssistantChatPromptDefinition(input);
     if (!output) {
-      // This case should ideally be handled by Zod schema validation or prompt output validation
-      // but as a fallback:
       return { assistantResponse: "I'm sorry, I couldn't generate a response." };
     }
     return output;
   }
 );
+
