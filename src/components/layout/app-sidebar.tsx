@@ -133,24 +133,27 @@ const SidebarNavigationContent = React.memo(function SidebarNavigationContent({
         Server Features
       </Link>
 
-      {categorizedAssistants.map(categoryGroup => (
-        <div key={categoryGroup.name} className="py-1">
-          <CategoryHeaderButton
-            name={categoryGroup.name}
-            isExpanded={!!expandedCategories[categoryGroup.name]}
-            onToggle={toggleCategory}
-          />
-          {expandedCategories[categoryGroup.name] && categoryGroup.assistants.map((assistant) => (
-            <AssistantNavItem
-              key={assistant.id}
-              assistant={assistant}
-              isActive={activeAssistantId === assistant.id && pathname.startsWith('/assistant/')}
-              onClick={handleAssistantClick}
-              onDelete={requestDeleteAssistant}
+      {categorizedAssistants.map(categoryGroup => {
+        const isExpanded = expandedCategories[categoryGroup.name] ?? true; // Default to true if not set
+        return (
+          <div key={categoryGroup.name} className="py-1">
+            <CategoryHeaderButton
+              name={categoryGroup.name}
+              isExpanded={isExpanded}
+              onToggle={toggleCategory}
             />
-          ))}
-        </div>
-      ))}
+            {isExpanded && categoryGroup.assistants.map((assistant) => (
+              <AssistantNavItem
+                key={assistant.id}
+                assistant={assistant}
+                isActive={activeAssistantId === assistant.id && pathname.startsWith('/assistant/')}
+                onClick={handleAssistantClick}
+                onDelete={requestDeleteAssistant}
+              />
+            ))}
+          </div>
+        );
+      })}
       {uncategorizedAssistants.length > 0 && (
         <div className="py-1">
           {categorizedAssistants.length > 0 && <div className="px-2 py-1 text-xs text-sidebar-foreground/50">Other Assistants</div>}
@@ -195,6 +198,7 @@ export default function AppSidebar() {
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [assistantToDelete, setAssistantToDelete] = useState<Assistant | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
   const pathname = usePathname();
   const router = useRouter();
@@ -264,32 +268,8 @@ export default function AppSidebar() {
     return Array.from(new Set(filteredAssistants.map(a => a.category).filter(Boolean as (value: string | undefined) => value is string)));
   }, [filteredAssistants]);
 
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    setExpandedCategories(currentExpanded => {
-      const newExpectedState: Record<string, boolean> = {};
-      categories.forEach(cat => {
-        newExpectedState[cat] = currentExpanded.hasOwnProperty(cat) ? currentExpanded[cat] : true;
-      });
-
-      let changed = false;
-      if (Object.keys(newExpectedState).length !== Object.keys(currentExpanded).length) {
-        changed = true;
-      } else {
-        for (const key in newExpectedState) {
-          if (newExpectedState[key] !== currentExpanded[key]) {
-            changed = true;
-            break;
-          }
-        }
-      }
-      return changed ? newExpectedState : currentExpanded;
-    });
-  }, [categories]);
-
   const toggleCategory = useCallback((category: string) => {
-    setExpandedCategories(prev => ({ ...prev, [category]: !prev[category] }));
+    setExpandedCategories(prev => ({ ...prev, [category]: !(prev[category] ?? true) }));
   }, []); 
 
   const categorizedAssistants = useMemo(() => {
