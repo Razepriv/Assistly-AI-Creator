@@ -1,15 +1,17 @@
 import ConfigPanelClientWrapper from '@/components/assistant/config-panel-client-wrapper';
 
 interface AssistantPageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
-export default function AssistantPage({ params }: AssistantPageProps) {
+export default async function AssistantPage({ params }: AssistantPageProps) {
+  const { id } = await params;
+  
   return (
     <div className="h-full flex flex-col">
-      <ConfigPanelClientWrapper assistantId={params.id} />
+      <ConfigPanelClientWrapper assistantId={id} />
     </div>
   );
 }
